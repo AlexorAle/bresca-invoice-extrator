@@ -1,0 +1,104 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets y configuración sensible
+.env
+service_account.json
+src/dashboard/config.yaml
+*.key
+*.pem
+*.crt
+
+# Data
+data/
+temp/
+logs/
+*.log
+*.log.*
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+
+# Backups y dumps
+*.sql
+*.backup
+*.dump
+*.gz
+
+# Ollama (si se descarga localmente)
+.ollama/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.tox/
+.hypothesis/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/dist/
+frontend/.env.local
+frontend/.env.production.local
+frontend/.env.development.local
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# State files
+state/
+*.json.backup
+

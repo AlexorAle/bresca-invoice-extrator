@@ -1,0 +1,412 @@
+{
+  "metadata": {
+    "archivo_procesado": "/home/alex/proyectos/invoice-extractor/temp/Iberdrola Junio 2025.pdf",
+    "modelo_ollama": "llava:7b",
+    "fecha_prueba": "2025-10-30T18:02:21.686257",
+    "numero_iteraciones": 10
+  },
+  "analisis": {
+    "resumen": {
+      "total_iteraciones": 10,
+      "exitosas": 0,
+      "fallidas": 10,
+      "tasa_exito_porcentaje": 0.0
+    },
+    "tiempos": {
+      "promedio": 0,
+      "minimo": 0,
+      "maximo": 0,
+      "desviacion": 0.0
+    },
+    "confianza": {
+      "distribucion": {},
+      "alta_porcentaje": 0,
+      "media_porcentaje": 0,
+      "baja_porcentaje": 0
+    },
+    "extractor": {
+      "ollama_usado": 0,
+      "tesseract_usado": 0,
+      "ollama_porcentaje": 0
+    },
+    "importes": {
+      "valores_unicos": 0,
+      "valores_distintos": [],
+      "frecuencia_valores": {}
+    },
+    "proveedores": {
+      "valores_unicos": 0,
+      "valores_distintos": [],
+      "frecuencia_valores": {}
+    },
+    "validaciones": {
+      "fiscal_ok": 0,
+      "fiscal_fallo": 0,
+      "negocio_ok": 0,
+      "negocio_fallo": 0
+    },
+    "problemas_detectados": [
+      "CRÍTICO: Ninguna iteración exitosa"
+    ],
+    "errores": {
+      "total": 10,
+      "tipos": {
+        "TypeError": 10
+      },
+      "detalles": [
+        {
+          "iteracion": 1,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 2,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 3,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 4,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 5,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 6,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 7,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 8,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 9,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        },
+        {
+          "iteracion": 10,
+          "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+          "tipo": "TypeError"
+        }
+      ]
+    }
+  },
+  "resultados_detallados": [
+    {
+      "iteracion": 1,
+      "timestamp": "2025-10-30T17:51:53.208840",
+      "exito": false,
+      "tiempo_segundos": 175.07,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "LIBERDROLA",
+        "numero_factura": "4631897",
+        "fecha_emision": "2021-12-15",
+        "moneda": "EUR",
+        "base_imponible": 1.95,
+        "iva_porcentaje": 0.07,
+        "impuestos_total": 1.38,
+        "importe_total": 2.73,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": false,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "revisar",
+      "importe_total": 2.73,
+      "proveedor": null,
+      "numero_factura": "4631897",
+      "fecha_emision": "2021-12-15",
+      "mensaje_fiscal": "Falló",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 2,
+      "timestamp": "2025-10-30T17:54:48.778556",
+      "exito": false,
+      "tiempo_segundos": 49.08,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "Liberdadroola",
+        "numero_factura": "8124567890",
+        "fecha_emision": "2023-04-03",
+        "moneda": "EUR",
+        "base_imponible": 5.97,
+        "iva_porcentaje": 1.0,
+        "impuestos_total": 6.97,
+        "importe_total": 12.94,
+        "confianza": "media"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": true,
+      "validacion_negocio": false,
+      "confianza": "media",
+      "extractor_usado": "ollama",
+      "estado_dto": "procesado",
+      "importe_total": 12.94,
+      "proveedor": null,
+      "numero_factura": "8124567890",
+      "fecha_emision": "2023-04-03",
+      "mensaje_fiscal": "OK",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 3,
+      "timestamp": "2025-10-30T17:55:38.360749",
+      "exito": false,
+      "tiempo_segundos": 44.92,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "LIBERDÁTRO",
+        "numero_factura": "3170",
+        "fecha_emision": "2022-08-24",
+        "moneda": "EUR",
+        "base_imponible": null,
+        "iva_porcentaje": null,
+        "impuestos_total": 16.9,
+        "importe_total": 36.85,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": true,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "procesado",
+      "importe_total": 36.85,
+      "proveedor": null,
+      "numero_factura": "3170",
+      "fecha_emision": "2022-08-24",
+      "mensaje_fiscal": "OK",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 4,
+      "timestamp": "2025-10-30T17:56:23.783838",
+      "exito": false,
+      "tiempo_segundos": 59.36,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "FACTURA DE COMPRAS",
+        "numero_factura": "0156789042",
+        "fecha_emision": "2023-02-22",
+        "moneda": "EUR",
+        "base_imponible": 100.0,
+        "iva_porcentaje": 21.0,
+        "impuestos_total": 21.0,
+        "importe_total": 123.0,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": false,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "revisar",
+      "importe_total": 123.0,
+      "proveedor": null,
+      "numero_factura": "0156789042",
+      "fecha_emision": "2023-02-22",
+      "mensaje_fiscal": "Falló",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 5,
+      "timestamp": "2025-10-30T17:57:23.643400",
+      "exito": false,
+      "tiempo_segundos": 42.21,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "Liberdad",
+        "numero_factura": "191258",
+        "fecha_emision": "2023-04-07",
+        "moneda": "EUR",
+        "base_imponible": null,
+        "iva_porcentaje": null,
+        "impuestos_total": null,
+        "importe_total": 10.8,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": true,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "procesado",
+      "importe_total": 10.8,
+      "proveedor": null,
+      "numero_factura": "191258",
+      "fecha_emision": "2023-04-07",
+      "mensaje_fiscal": "OK",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 6,
+      "timestamp": "2025-10-30T17:58:06.348948",
+      "exito": false,
+      "tiempo_segundos": 48.64,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "LIBERDROGOL",
+        "numero_factura": "12345678901234567890",
+        "fecha_emision": "2022-03-25",
+        "moneda": "EUR",
+        "base_imponible": null,
+        "iva_porcentaje": null,
+        "impuestos_total": null,
+        "importe_total": null,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": false,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "revisar",
+      "importe_total": null,
+      "proveedor": null,
+      "numero_factura": "12345678901234567890",
+      "fecha_emision": "2022-03-25",
+      "mensaje_fiscal": "Falló",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 7,
+      "timestamp": "2025-10-30T17:58:55.491511",
+      "exito": false,
+      "tiempo_segundos": 52.57,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "Libertadro",
+        "numero_factura": "168425039",
+        "fecha_emision": "2023-02-02",
+        "moneda": "EUR",
+        "base_imponible": 37.35,
+        "iva_porcentage": "12.00",
+        "impuestos_total": 49.35,
+        "importe_total": 66.7,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": false,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "revisar",
+      "importe_total": 66.7,
+      "proveedor": null,
+      "numero_factura": "168425039",
+      "fecha_emision": "2023-02-02",
+      "mensaje_fiscal": "Falló",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 8,
+      "timestamp": "2025-10-30T17:59:48.556915",
+      "exito": false,
+      "tiempo_segundos": 49.38,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "Liberdrola",
+        "numero_factura": "1234567890",
+        "fecha_emision": "2023-03-01",
+        "moneda": "EUR",
+        "base_imponible": 12.99,
+        "iva_porcentage": 21,
+        "impuestos_total": 4.54,
+        "importe_total": 17.53,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": true,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "procesado",
+      "importe_total": 17.53,
+      "proveedor": null,
+      "numero_factura": "1234567890",
+      "fecha_emision": "2023-03-01",
+      "mensaje_fiscal": "OK",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 9,
+      "timestamp": "2025-10-30T18:00:38.443732",
+      "exito": false,
+      "tiempo_segundos": 55.48,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "Liberdrola",
+        "numero_factura": "002661349",
+        "fecha_emision": "2022-05-26",
+        "moneda": "EUR",
+        "base_imponible": 138.72,
+        "iva_porcentaje": 0.22,
+        "impuestos_total": 32.94,
+        "importe_total": 161.66,
+        "confianza": "alta"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": false,
+      "validacion_negocio": false,
+      "confianza": "alta",
+      "extractor_usado": "ollama",
+      "estado_dto": "revisar",
+      "importe_total": 161.66,
+      "proveedor": null,
+      "numero_factura": "002661349",
+      "fecha_emision": "2022-05-26",
+      "mensaje_fiscal": "Falló",
+      "tipo_error": "TypeError"
+    },
+    {
+      "iteracion": 10,
+      "timestamp": "2025-10-30T18:01:34.420140",
+      "exito": false,
+      "tiempo_segundos": 47.24,
+      "error": "validate_business_rules() takes 1 positional argument but 2 were given",
+      "datos_extraidos": {
+        "proveedor_text": "FACTURA DE LIBRODRO",
+        "numero_factura": "001",
+        "fecha_emision": "2023-06-05",
+        "moneda": "EUR",
+        "base_imponible": 19.5,
+        "iva_porcentaje": 0.08,
+        "impuestos_total": 1.57,
+        "importe_total": 21.07,
+        "confianza": "baja"
+      },
+      "dto_creado": true,
+      "validacion_fiscal": true,
+      "validacion_negocio": false,
+      "confianza": "baja",
+      "extractor_usado": "tesseract",
+      "estado_dto": "procesado",
+      "importe_total": 21.07,
+      "proveedor": null,
+      "numero_factura": "001",
+      "fecha_emision": "2023-06-05",
+      "mensaje_fiscal": "OK",
+      "tipo_error": "TypeError"
+    }
+  ]
+}

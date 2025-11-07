@@ -1,0 +1,13 @@
+MIGRACIÓN DE BASE DE DATOS REQUERIDA
+=====================================
+
+Para completar la migración a OpenAI, necesitas ejecutar este comando SQL:
+
+sudo -u postgres psql -d negocio_db -f apply_migration_manual.sql
+
+O ejecutar manualmente:
+
+sudo -u postgres psql -d negocio_db -c "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS drive_modified_time TIMESTAMP;"
+sudo -u postgres psql -d negocio_db -c "CREATE INDEX IF NOT EXISTS idx_facturas_drive_modified ON facturas (drive_modified_time);"
+
+Sin esta migración, el sistema no podrá verificar duplicados correctamente.
