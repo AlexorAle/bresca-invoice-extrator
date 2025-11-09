@@ -11,12 +11,15 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from src.drive.drive_incremental import DriveIncrementalClient
+from src.drive_client import DriveClient
 from src.sync.state_store import get_state_store
 from src.ocr_extractor import InvoiceExtractor
 from src.db.database import Database
 from src.db.repositories import FacturaRepository, EventRepository
 from src.pipeline.ingest import process_batch
+from src.pipeline.job_lock import JobLock
 from src.logging_conf import get_logger
+from filelock import Timeout
 
 logger = get_logger(__name__)
 
@@ -34,11 +37,16 @@ class IncrementalIngestStats:
         self.invoices_error_total = 0
         self.invoices_ignored_total = 0
         self.invoices_review_total = 0
+        self.invoices_reprocessed_total = 0
+        self.invoices_reprocessed_success = 0
+        self.invoices_reprocessed_failed = 0
+        self.invoices_reprocessed_permanent_error = 0
         self.last_sync_time_before = None
         self.last_sync_time_after = None
         self.max_modified_time_processed = None
         self.files_downloaded = 0
         self.download_errors = 0
+        self.files_rejected_size = 0
         self.batch_errors = 0
         
     def to_dict(self) -> Dict:
@@ -54,6 +62,7 @@ class IncrementalIngestStats:
             'drive_pages_fetched_total': self.drive_pages_fetched_total,
             'files_downloaded': self.files_downloaded,
             'download_errors': self.download_errors,
+            'files_rejected_size': self.files_rejected_size,
             'batch_errors': self.batch_errors,
             'invoices_processed_ok_total': self.invoices_processed_ok_total,
             'invoices_duplicate_total': self.invoices_duplicate_total,
@@ -61,6 +70,10 @@ class IncrementalIngestStats:
             'invoices_ignored_total': self.invoices_ignored_total,
             'invoices_review_total': self.invoices_review_total,
             'invoices_error_total': self.invoices_error_total,
+            'invoices_reprocessed_total': self.invoices_reprocessed_total,
+            'invoices_reprocessed_success': self.invoices_reprocessed_success,
+            'invoices_reprocessed_failed': self.invoices_reprocessed_failed,
+            'invoices_reprocessed_permanent_error': self.invoices_reprocessed_permanent_error,
             'last_sync_time_before': self.last_sync_time_before.isoformat() if self.last_sync_time_before else None,
             'last_sync_time_after': self.last_sync_time_after.isoformat() if self.last_sync_time_after else None,
             'max_modified_time_processed': self.max_modified_time_processed.isoformat() if self.max_modified_time_processed else None
@@ -104,12 +117,24 @@ class IncrementalIngestPipeline:
         self.max_pages_per_run = max_pages_per_run or int(os.getenv('MAX_PAGES_PER_RUN', '10'))
         self.advance_strategy = advance_strategy or os.getenv('ADVANCE_STRATEGY', 'MAX_OK_TIME')
         
+        # Configuración de reprocesamiento
+        self.reprocess_enabled = os.getenv('REPROCESS_REVIEW_ENABLED', 'true').lower() == 'true'
+        self.reprocess_max_days = int(os.getenv('REPROCESS_REVIEW_MAX_DAYS', '30'))
+        self.reprocess_max_count = int(os.getenv('REPROCESS_REVIEW_MAX_COUNT', '50'))
+        self.reprocess_max_attempts = int(os.getenv('REPROCESS_REVIEW_MAX_ATTEMPTS', '3'))
+        self.reprocess_dry_run = os.getenv('REPROCESS_REVIEW_DRY_RUN', 'false').lower() == 'true'
+        
+        # Sistema de lock para prevenir ejecuciones concurrentes
+        lock_timeout = int(os.getenv('JOB_LOCK_TIMEOUT_SEC', '300'))  # 5 minutos por defecto
+        self.job_lock = JobLock(timeout=lock_timeout)
+        
         # Validaciones
         if not self.folder_id:
             raise ValueError("GOOGLE_DRIVE_FOLDER_ID no configurado")
         
         # Inicializar componentes
         self.drive_client = DriveIncrementalClient()
+        self.drive_client_base = DriveClient()  # Para get_file_by_id
         self.db = Database()
         self.state_store = get_state_store(self.db)
         self.extractor = InvoiceExtractor()
@@ -133,11 +158,32 @@ class IncrementalIngestPipeline:
         
         Returns:
             Diccionario con estadísticas de ejecución
+        
+        Raises:
+            Timeout: Si otra instancia del job está ejecutándose
         """
         logger.info("="*70)
         logger.info("INICIANDO INGESTA INCREMENTAL")
         logger.info("="*70)
         
+        # Adquirir lock para prevenir ejecuciones concurrentes
+        try:
+            with self.job_lock.acquire():
+                return self._run_with_lock()
+        except Timeout:
+            logger.error(
+                "No se puede ejecutar: otra instancia del job está ejecutándose. "
+                "Espera a que termine o verifica si hay un proceso zombie."
+            )
+            raise
+    
+    def _run_with_lock(self) -> Dict:
+        """
+        Ejecutar pipeline (método interno, ya con lock adquirido)
+        
+        Returns:
+            Diccionario con estadísticas de ejecución
+        """
         try:
             # Validar acceso a carpeta
             if not self.drive_client.validate_folder_access(self.folder_id):
@@ -157,6 +203,10 @@ class IncrementalIngestPipeline:
             logger.info(f"Directorio temporal: {temp_dir}")
             
             try:
+                # Reprocesar facturas en estado "revisar" (si está habilitado)
+                if self.reprocess_enabled:
+                    self._reprocess_review_invoices(temp_dir)
+                
                 # Procesar archivos incrementales
                 self._process_incremental_files(temp_dir, last_sync_time)
                 
@@ -181,6 +231,8 @@ class IncrementalIngestPipeline:
             logger.info(f"Duplicados: {stats_dict['invoices_duplicate_total']}")
             logger.info(f"Revisiones: {stats_dict['invoices_revision_total']}")
             logger.info(f"Errores: {stats_dict['invoices_error_total']}")
+            if stats_dict.get('files_rejected_size', 0) > 0:
+                logger.info(f"Archivos rechazados por tamaño: {stats_dict['files_rejected_size']}")
             logger.info(f"Timestamp actualizado: {stats_dict['last_sync_time_after']}")
             
             return stats_dict
@@ -301,13 +353,39 @@ class IncrementalIngestPipeline:
             file_name = file_info['name']
             
             try:
+                # Validar tamaño antes de descargar
+                file_size = file_info.get('size')
+                if file_size is not None:
+                    try:
+                        file_size = int(file_size)  # Convertir a int si viene como string
+                    except (ValueError, TypeError):
+                        file_size = None
+                
+                if file_size is not None:
+                    max_size_mb = int(os.getenv('MAX_PDF_SIZE_MB', '50'))
+                    file_size_mb = file_size / (1024 * 1024)
+                    
+                    if file_size_mb > max_size_mb:
+                        error_msg = f"Archivo excede tamaño máximo: {file_size_mb:.2f} MB > {max_size_mb} MB"
+                        logger.warning(f"Rechazado por tamaño: {file_name} - {error_msg}")
+                        self.stats.files_rejected_size += 1
+                        
+                        # Registrar evento de auditoría
+                        self.event_repo.insert_event(
+                            file_id,
+                            'file_rejected_size',
+                            'WARNING',
+                            error_msg
+                        )
+                        continue
+                
                 # Sanitizar nombre de archivo
                 safe_name = self._sanitize_filename(file_name)
                 local_path = temp_dir / f"{file_id}_{safe_name}"
                 
-                # Descargar
+                # Descargar (pasar tamaño para validación adicional en DriveClient)
                 logger.info(f"Descargando: {file_name} ({file_id})")
-                success = self.drive_client.download_file(file_id, str(local_path))
+                success = self.drive_client.download_file(file_id, str(local_path), file_size=file_size)
                 
                 if success and local_path.exists():
                     # Agregar ruta local a metadatos
@@ -432,6 +510,203 @@ class IncrementalIngestPipeline:
         
         else:
             raise ValueError(f"ADVANCE_STRATEGY inválida: {self.advance_strategy}")
+    
+    def _reprocess_review_invoices(self, temp_dir: Path):
+        """
+        Reprocesar facturas en estado 'revisar'
+        
+        Args:
+            temp_dir: Directorio temporal para descargas
+        """
+        if self.reprocess_dry_run:
+            logger.info("="*70)
+            logger.info("REPROCESAMIENTO DE FACTURAS (DRY-RUN)")
+            logger.info("="*70)
+        else:
+            logger.info("="*70)
+            logger.info("REPROCESAMIENTO DE FACTURAS EN 'REVISAR'")
+            logger.info("="*70)
+        
+        # Consultar facturas para reprocesar
+        facturas = self.factura_repo.get_facturas_para_reprocesar(
+            estado='revisar',
+            max_dias=self.reprocess_max_days,
+            limite=self.reprocess_max_count,
+            max_attempts=self.reprocess_max_attempts
+        )
+        
+        if not facturas:
+            logger.info("No hay facturas para reprocesar")
+            return
+        
+        logger.info(
+            f"Encontradas {len(facturas)} facturas para reprocesar "
+            f"(últimos {self.reprocess_max_days} días, máximo {self.reprocess_max_attempts} intentos)"
+        )
+        
+        if self.reprocess_dry_run:
+            logger.info("MODO DRY-RUN: No se procesarán facturas, solo se mostrará información")
+            for factura in facturas:
+                logger.info(
+                    f"  - {factura['drive_file_name']} "
+                    f"(intentos: {factura['reprocess_attempts']}, "
+                    f"error: {factura['error_msg'][:50] if factura['error_msg'] else 'N/A'})"
+                )
+            return
+        
+        # Procesar cada factura
+        for idx, factura_info in enumerate(facturas, 1):
+            factura_id = factura_info['id']
+            drive_file_id = factura_info['drive_file_id']
+            drive_file_name = factura_info['drive_file_name']
+            attempts = factura_info['reprocess_attempts']
+            
+            logger.info(
+                f"[{idx}/{len(facturas)}] Reprocesando: {drive_file_name} "
+                f"(intento {attempts + 1}/{self.reprocess_max_attempts})"
+            )
+            
+            try:
+                # Obtener metadata del archivo desde Drive
+                file_metadata = self.drive_client_base.get_file_by_id(drive_file_id)
+                
+                if not file_metadata:
+                    logger.warning(f"No se pudo obtener metadata de {drive_file_id}")
+                    self.stats.invoices_reprocessed_failed += 1
+                    self.factura_repo.increment_reprocess_attempts(
+                        factura_id,
+                        f"No se pudo obtener metadata desde Drive",
+                        self.reprocess_max_attempts
+                    )
+                    continue
+                
+                # Validar que es PDF
+                if file_metadata.get('mimeType') != 'application/pdf':
+                    logger.warning(f"Archivo {drive_file_id} no es PDF: {file_metadata.get('mimeType')}")
+                    self.stats.invoices_reprocessed_failed += 1
+                    self.factura_repo.increment_reprocess_attempts(
+                        factura_id,
+                        f"Archivo no es PDF: {file_metadata.get('mimeType')}",
+                        self.reprocess_max_attempts
+                    )
+                    continue
+                
+                # Registrar evento de inicio
+                self.event_repo.insert_event(
+                    drive_file_id,
+                    'reprocess_start',
+                    'INFO',
+                    f'Iniciando reprocesamiento (intento {attempts + 1})'
+                )
+                
+                # Descargar archivo
+                from src.pipeline.validate import sanitize_filename
+                safe_name = sanitize_filename(drive_file_name)
+                local_path = temp_dir / f"{drive_file_id}_{safe_name}"
+                
+                success = self.drive_client_base.download_file(drive_file_id, str(local_path))
+                
+                if not success:
+                    logger.error(f"No se pudo descargar {drive_file_id}")
+                    self.stats.invoices_reprocessed_failed += 1
+                    self.factura_repo.increment_reprocess_attempts(
+                        factura_id,
+                        "Error descargando archivo desde Drive",
+                        self.reprocess_max_attempts
+                    )
+                    continue
+                
+                # Preparar file_info compatible con process_batch
+                file_info = {
+                    'id': drive_file_id,
+                    'name': drive_file_name,
+                    'local_path': str(local_path),
+                    'folder_name': factura_info.get('drive_folder_name', file_metadata.get('folder_name', 'unknown')),
+                    'modifiedTime': file_metadata.get('modifiedTime'),
+                    'size': file_metadata.get('size')
+                }
+                
+                # Reprocesar con process_batch
+                batch_stats = process_batch([file_info], self.extractor, self.db)
+                
+                # Verificar resultado
+                if batch_stats.get('exitosos', 0) > 0:
+                    # Reprocesamiento exitoso
+                    logger.info(f"✅ Reprocesamiento exitoso: {drive_file_name}")
+                    self.stats.invoices_reprocessed_success += 1
+                    
+                    # Verificar si cambió de estado
+                    factura_actualizada = self.factura_repo.find_by_file_id(drive_file_id)
+                    if factura_actualizada and factura_actualizada.get('estado') == 'procesado':
+                        # Resetear contador (implícito al cambiar estado, pero registrar evento)
+                        self.event_repo.insert_event(
+                            drive_file_id,
+                            'reprocess_success',
+                            'INFO',
+                            f'Reprocesamiento exitoso, estado cambiado a "procesado"'
+                        )
+                else:
+                    # Reprocesamiento falló
+                    logger.warning(f"⚠️ Reprocesamiento falló: {drive_file_name}")
+                    self.stats.invoices_reprocessed_failed += 1
+                    
+                    # Incrementar contador
+                    permanent_error = self.factura_repo.increment_reprocess_attempts(
+                        factura_id,
+                        f"Reprocesamiento falló: {batch_stats.get('fallidos', 0)} errores",
+                        self.reprocess_max_attempts
+                    )
+                    
+                    if permanent_error:
+                        logger.warning(f"❌ Máximo de intentos alcanzado: {drive_file_name}")
+                        self.stats.invoices_reprocessed_permanent_error += 1
+                        self.event_repo.insert_event(
+                            drive_file_id,
+                            'reprocess_permanent_error',
+                            'ERROR',
+                            f'Máximo de intentos ({self.reprocess_max_attempts}) alcanzado'
+                        )
+                    else:
+                        self.event_repo.insert_event(
+                            drive_file_id,
+                            'reprocess_attempt',
+                            'WARNING',
+                            f'Reprocesamiento falló (intento {attempts + 1}/{self.reprocess_max_attempts})'
+                        )
+                
+                self.stats.invoices_reprocessed_total += 1
+                
+            except Exception as e:
+                logger.error(
+                    f"Error reprocesando {drive_file_name}: {e}",
+                    exc_info=True,
+                    extra={'drive_file_id': drive_file_id}
+                )
+                self.stats.invoices_reprocessed_failed += 1
+                
+                # Incrementar contador
+                permanent_error = self.factura_repo.increment_reprocess_attempts(
+                    factura_id,
+                    f"Error en reprocesamiento: {str(e)[:200]}",
+                    self.reprocess_max_attempts
+                )
+                
+                if permanent_error:
+                    self.stats.invoices_reprocessed_permanent_error += 1
+                    self.event_repo.insert_event(
+                        drive_file_id,
+                        'reprocess_permanent_error',
+                        'ERROR',
+                        f'Error crítico y máximo de intentos alcanzado'
+                    )
+        
+        logger.info("="*70)
+        logger.info("REPROCESAMIENTO COMPLETADO")
+        logger.info("="*70)
+        logger.info(f"Total reprocesadas: {self.stats.invoices_reprocessed_total}")
+        logger.info(f"Exitosas: {self.stats.invoices_reprocessed_success}")
+        logger.info(f"Fallidas: {self.stats.invoices_reprocessed_failed}")
+        logger.info(f"Error permanente: {self.stats.invoices_reprocessed_permanent_error}")
     
     def get_stats(self) -> Dict:
         """Obtener estadísticas actuales"""

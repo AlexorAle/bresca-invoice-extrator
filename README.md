@@ -67,6 +67,19 @@ Variables importantes:
 - `GOOGLE_DRIVE_FOLDER_ID`: ID de carpeta base en Drive (opcional)
 - `OLLAMA_BASE_URL`: URL de Ollama API (default: http://localhost:11434)
 - `MONTHS_TO_SCAN`: Meses a procesar (ej: agosto,septiembre,octubre)
+- `BATCH_SIZE`: Archivos por lote en procesamiento (default: 10)
+- `MAX_PAGES_PER_RUN`: Límite de páginas Drive por ejecución (default: 10)
+
+Variables de reprocesamiento automático:
+- `REPROCESS_REVIEW_ENABLED`: Habilitar reprocesamiento automático (default: true)
+- `REPROCESS_REVIEW_MAX_DAYS`: Solo reprocesar facturas de últimos N días (default: 30)
+- `REPROCESS_REVIEW_MAX_COUNT`: Máximo de facturas a reprocesar por ejecución (default: 50)
+- `REPROCESS_REVIEW_MAX_ATTEMPTS`: Máximo de intentos por factura antes de marcar como error_permanente (default: 3)
+- `REPROCESS_REVIEW_DRY_RUN`: Modo dry-run (solo mostrar, no procesar) (default: false)
+
+Variables de validación:
+- `MAX_PDF_SIZE_MB`: Tamaño máximo de PDF permitido en MB (default: 50). Archivos mayores se rechazan antes de descargar.
+- `JOB_LOCK_TIMEOUT_SEC`: Timeout para adquirir lock de ejecución en segundos (default: 300)
 
 ### 4. Configurar Google Drive Service Account
 

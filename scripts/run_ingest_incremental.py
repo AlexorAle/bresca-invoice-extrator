@@ -26,10 +26,12 @@ sys.path.insert(0, str(project_root / 'src'))
 
 from src.security.secrets import load_env
 from src.pipeline.ingest_incremental import IncrementalIngestPipeline
+from src.pipeline.job_lock import JobLock
 from src.drive.drive_incremental import DriveIncrementalClient
 from src.sync.state_store import get_state_store
 from src.db.database import Database
 from src.logging_conf import get_logger
+from filelock import Timeout
 
 # Cargar variables de entorno
 load_env()
@@ -288,6 +290,19 @@ def main():
         print("ℹ️  Dry run completado. No se procesaron archivos.")
         sys.exit(0)
     
+    # Verificar lock antes de ejecutar (para dar mensaje más claro)
+    job_lock = JobLock()
+    if job_lock.is_locked():
+        print()
+        print("⚠️  ADVERTENCIA: Otra instancia del job está ejecutándose")
+        print(f"   Lock file: {job_lock.lock_file_path}")
+        print()
+        print("   Si estás seguro de que no hay otra instancia ejecutándose,")
+        print("   puedes forzar la liberación del lock (peligroso):")
+        print("   python -c 'from src.pipeline.job_lock import JobLock; JobLock().force_release()'")
+        print()
+        sys.exit(1)
+    
     # Ejecutar pipeline
     print_banner("⚙️  EJECUTANDO PIPELINE")
     
@@ -336,6 +351,13 @@ def main():
         print(f"⏰ Fin: {datetime.utcnow().isoformat()}Z")
         
         sys.exit(exit_code)
+    
+    except Timeout:
+        print()
+        print("❌ Error: Otra instancia del job está ejecutándose")
+        print("   Espera a que termine o verifica procesos activos")
+        logger.error("Job bloqueado: otra instancia en ejecución")
+        sys.exit(1)
     
     except KeyboardInterrupt:
         print()

@@ -2,7 +2,7 @@
 Validaciones de reglas de negocio y duplicados
 """
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, date
 
 from src.db.database import Database
 from src.db.repositories import FacturaRepository
@@ -50,7 +50,7 @@ def validate_business_rules(factura: dict) -> bool:
     
     # 5. Validar estado
     estado = factura.get('estado')
-    if estado and estado not in ['procesado', 'pendiente', 'error', 'revisar']:
+    if estado and estado not in ['procesado', 'pendiente', 'error', 'revisar', 'duplicado', 'error_permanente']:
         errors.append(f"estado inválido: {estado}")
     
     # 6. Validar coherencia de importes (si existen todos los campos)
@@ -80,14 +80,27 @@ def validate_business_rules(factura: dict) -> bool:
     fecha_emision = factura.get('fecha_emision')
     if fecha_emision:
         try:
-            fecha_obj = datetime.fromisoformat(fecha_emision)
-            hoy = datetime.now()
+            # Manejar diferentes tipos: date, datetime, string ISO
+            if isinstance(fecha_emision, date):
+                # Ya es un objeto date, convertir a datetime para comparación
+                fecha_obj = datetime.combine(fecha_emision, datetime.min.time())
+            elif isinstance(fecha_emision, datetime):
+                # Ya es datetime
+                fecha_obj = fecha_emision
+            elif isinstance(fecha_emision, str):
+                # String ISO, parsear
+                fecha_obj = datetime.fromisoformat(fecha_emision.replace('Z', '+00:00'))
+            else:
+                errors.append(f"fecha_emision tiene tipo inválido: {type(fecha_emision)}")
+                fecha_obj = None
             
-            # Tolerancia de 1 día para diferencias de zona horaria
-            if fecha_obj > hoy.replace(hour=23, minute=59, second=59):
-                errors.append(f"fecha_emision es futura: {fecha_emision}")
-        except (ValueError, TypeError):
-            errors.append(f"fecha_emision tiene formato inválido: {fecha_emision}")
+            if fecha_obj:
+                hoy = datetime.now()
+                # Tolerancia de 1 día para diferencias de zona horaria
+                if fecha_obj > hoy.replace(hour=23, minute=59, second=59):
+                    errors.append(f"fecha_emision es futura: {fecha_emision}")
+        except (ValueError, TypeError, AttributeError) as e:
+            errors.append(f"fecha_emision tiene formato inválido: {fecha_emision} - {e}")
     
     # Logear errores
     if errors:

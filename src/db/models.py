@@ -56,6 +56,11 @@ class Factura(Base):
     estado = Column(Text, default='procesado')
     error_msg = Column(Text)
     
+    # Campos para reprocesamiento automático
+    reprocess_attempts = Column(Integer, default=0)
+    reprocessed_at = Column(DateTime)
+    reprocess_reason = Column(Text)
+    
     creado_en = Column(DateTime, default=datetime.utcnow)
     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -69,7 +74,8 @@ class Factura(Base):
         CheckConstraint('impuestos_total >= 0', name='check_impuestos_positive'),
         # Removido constraint que impedía valores negativos - ahora se permiten facturas con importe negativo
         CheckConstraint("confianza IN ('alta', 'media', 'baja')", name='check_confianza_values'),
-        CheckConstraint("estado IN ('procesado', 'pendiente', 'error', 'revisar', 'duplicado')", name='check_estado_values'),
+        CheckConstraint("estado IN ('procesado', 'pendiente', 'error', 'revisar', 'duplicado', 'error_permanente')", name='check_estado_values'),
+        CheckConstraint('reprocess_attempts >= 0', name='check_reprocess_attempts_positive'),
         Index('idx_facturas_hash_contenido_unique', 'hash_contenido', unique=True, postgresql_where=(hash_contenido != None)),
         Index('idx_facturas_proveedor_numero', 'proveedor_text', 'numero_factura'),
         Index('idx_facturas_estado', 'estado'),

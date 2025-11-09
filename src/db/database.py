@@ -23,11 +23,13 @@ class Database:
             raise ValueError("DATABASE_URL no configurada")
         
         # Crear engine con pool
+        # Optimizado: pool_size aumentado para mejor concurrencia
+        # Cálculo: workers × threads × 1.5 = ~5-8 (usando 5 como base conservadora)
         self.engine = create_engine(
             self.database_url,
             poolclass=QueuePool,
-            pool_size=2,
-            max_overflow=10,
+            pool_size=5,  # Aumentado de 2 a 5 para mejor throughput concurrente
+            max_overflow=15,  # Aumentado de 10 a 15 para picos más altos
             pool_timeout=30,
             pool_pre_ping=True,  # Verificar conexión antes de usar
             echo=False

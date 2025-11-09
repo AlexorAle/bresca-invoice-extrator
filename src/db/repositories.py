@@ -2,7 +2,7 @@
 Repositorios para operaciones de base de datos
 """
 from typing import List, Dict, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from calendar import monthrange
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import func, extract
@@ -114,10 +114,24 @@ class FacturaRepository:
             return None
         
         with self.db.get_session() as session:
-            factura = session.query(Factura).filter(
-                Factura.proveedor_text == proveedor_text,
-                Factura.numero_factura == numero_factura
+            # OPTIMIZACIÓN: Buscar primero por proveedor_id si existe
+            # Si no, buscar por proveedor_text (compatibilidad)
+            proveedor = session.query(Proveedor).filter(
+                Proveedor.nombre == proveedor_text
             ).first()
+            
+            if proveedor:
+                # Buscar por proveedor_id (más eficiente)
+                factura = session.query(Factura).filter(
+                    Factura.proveedor_id == proveedor.id,
+                    Factura.numero_factura == numero_factura
+                ).first()
+            else:
+                # Fallback: buscar por proveedor_text (compatibilidad)
+                factura = session.query(Factura).filter(
+                    Factura.proveedor_text == proveedor_text,
+                    Factura.numero_factura == numero_factura
+                ).first()
             
             if not factura:
                 return None
@@ -128,6 +142,7 @@ class FacturaRepository:
                 'drive_file_name': factura.drive_file_name,
                 'hash_contenido': factura.hash_contenido,
                 'proveedor_text': factura.proveedor_text,
+                'proveedor_id': factura.proveedor_id,  # Agregado para normalización
                 'numero_factura': factura.numero_factura,
                 'importe_total': float(factura.importe_total) if factura.importe_total else None,
                 'fecha_emision': factura.fecha_emision.isoformat() if factura.fecha_emision else None,
@@ -147,6 +162,27 @@ class FacturaRepository:
             ID de la factura insertada/actualizada
         """
         with self.db.get_session() as session:
+            # NORMALIZACIÓN: Si viene proveedor_text pero no proveedor_id, buscar/crear proveedor
+            proveedor_text = factura_data.get('proveedor_text')
+            if proveedor_text and not factura_data.get('proveedor_id'):
+                # Buscar proveedor existente
+                proveedor = session.query(Proveedor).filter(
+                    Proveedor.nombre == proveedor_text
+                ).first()
+                
+                if not proveedor:
+                    # Crear nuevo proveedor
+                    proveedor = Proveedor(nombre=proveedor_text)
+                    session.add(proveedor)
+                    session.flush()  # Para obtener el ID
+                    logger.debug(f"Nuevo proveedor creado: {proveedor_text}")
+                
+                # Establecer proveedor_id
+                factura_data['proveedor_id'] = proveedor.id
+                # Mantener proveedor_text como denormalizado para compatibilidad
+                if 'proveedor_text' not in factura_data:
+                    factura_data['proveedor_text'] = proveedor_text
+            
             # Preparar datos para insert
             stmt = insert(Factura).values(**factura_data)
             
@@ -171,7 +207,8 @@ class FacturaRepository:
                 f"Factura upsert exitoso: {factura_data.get('drive_file_name')}",
                 extra={
                     'drive_file_id': factura_data.get('drive_file_id'),
-                    'increment_revision': increment_revision
+                    'increment_revision': increment_revision,
+                    'proveedor_id': factura_data.get('proveedor_id')
                 }
             )
             
@@ -523,16 +560,20 @@ class FacturaRepository:
             # Usar fecha_emision si existe, sino usar fecha_recepcion
             fecha_filtro = func.coalesce(Factura.fecha_emision, Factura.fecha_recepcion)
             
+            # OPTIMIZACIÓN: Usar proveedor_id con JOIN para mejor rendimiento
+            # Fallback a proveedor_text si proveedor_id es NULL (compatibilidad)
             results = session.query(
-                Factura.proveedor_text.label('categoria'),
+                func.coalesce(Proveedor.nombre, Factura.proveedor_text, 'Sin proveedor').label('categoria'),
                 func.count(Factura.id).label('cantidad'),
                 func.sum(Factura.importe_total).label('importe_total')
+            ).outerjoin(
+                Proveedor, Factura.proveedor_id == Proveedor.id
             ).filter(
                 fecha_filtro >= start_date,
                 fecha_filtro <= end_date,
-                Factura.proveedor_text.isnot(None)
+                (Factura.proveedor_id.isnot(None) | Factura.proveedor_text.isnot(None))
             ).group_by(
-                Factura.proveedor_text
+                Proveedor.nombre, Factura.proveedor_text
             ).order_by(
                 func.sum(Factura.importe_total).desc()
             ).all()
@@ -545,6 +586,120 @@ class FacturaRepository:
                 }
                 for r in results
             ]
+    
+    def get_facturas_para_reprocesar(
+        self,
+        estado: str = 'revisar',
+        max_dias: int = 30,
+        limite: int = 50,
+        max_attempts: int = 3
+    ) -> List[dict]:
+        """
+        Obtener facturas que requieren reprocesamiento
+        
+        Args:
+            estado: Estado de facturas a buscar (default: 'revisar')
+            max_dias: Solo facturas de últimos N días
+            limite: Máximo de facturas a retornar
+            max_attempts: Máximo de intentos permitidos
+        
+        Returns:
+            Lista de facturas con drive_file_id y metadata necesaria
+        """
+        with self.db.get_session() as session:
+            # Calcular fecha límite
+            fecha_limite = datetime.utcnow() - timedelta(days=max_dias)
+            
+            # Patrones de error de alta prioridad (bugs conocidos)
+            high_priority_patterns = [
+                'tipo inválido',
+                'formato inválido',
+                'parsing failed',
+                'Validación de negocio falló'
+            ]
+            
+            # Query base: facturas en estado, últimos N días, intentos < máximo
+            base_query = session.query(Factura).filter(
+                Factura.estado == estado,
+                Factura.actualizado_en >= fecha_limite,
+                Factura.reprocess_attempts < max_attempts
+            )
+            
+            # Obtener todas las facturas que cumplen criterios
+            facturas = base_query.order_by(
+                Factura.actualizado_en.desc()
+            ).limit(limite * 2).all()  # Obtener más para priorizar
+            
+            # Priorizar por error_msg
+            def get_priority(factura):
+                error_msg = (factura.error_msg or '').lower()
+                for pattern in high_priority_patterns:
+                    if pattern.lower() in error_msg:
+                        return 0  # Alta prioridad
+                return 1  # Baja prioridad
+            
+            # Ordenar por prioridad y luego por fecha
+            facturas_priorizadas = sorted(facturas, key=lambda f: (get_priority(f), f.actualizado_en), reverse=True)
+            
+            # Limitar resultado
+            facturas_priorizadas = facturas_priorizadas[:limite]
+            
+            return [
+                {
+                    'id': f.id,
+                    'drive_file_id': f.drive_file_id,
+                    'drive_file_name': f.drive_file_name,
+                    'drive_folder_name': f.drive_folder_name,
+                    'estado': f.estado,
+                    'error_msg': f.error_msg,
+                    'reprocess_attempts': f.reprocess_attempts or 0,
+                    'actualizado_en': f.actualizado_en
+                }
+                for f in facturas_priorizadas
+            ]
+    
+    def increment_reprocess_attempts(
+        self,
+        factura_id: int,
+        reason: str,
+        max_attempts: int = 3
+    ) -> bool:
+        """
+        Incrementar contador de intentos de reprocesamiento
+        
+        Args:
+            factura_id: ID de la factura
+            reason: Razón del reprocesamiento
+            max_attempts: Máximo de intentos permitidos
+        
+        Returns:
+            True si se alcanzó el máximo (cambió a error_permanente), False en caso contrario
+        """
+        with self.db.get_session() as session:
+            factura = session.query(Factura).filter(
+                Factura.id == factura_id
+            ).first()
+            
+            if not factura:
+                logger.warning(f"Factura {factura_id} no encontrada para incrementar intentos")
+                return False
+            
+            # Incrementar contador
+            factura.reprocess_attempts = (factura.reprocess_attempts or 0) + 1
+            factura.reprocessed_at = datetime.utcnow()
+            factura.reprocess_reason = reason
+            
+            # Si alcanza máximo, cambiar a error_permanente
+            if factura.reprocess_attempts >= max_attempts:
+                factura.estado = 'error_permanente'
+                factura.error_msg = (factura.error_msg or '') + f' | Máximo de intentos de reprocesamiento alcanzado ({max_attempts})'
+                logger.warning(
+                    f"Factura {factura_id} alcanzó máximo de intentos, marcada como error_permanente",
+                    extra={'drive_file_id': factura.drive_file_id}
+                )
+                return True
+            
+            return False
 
 class EventRepository:
     """Repositorio para eventos de auditoría"""

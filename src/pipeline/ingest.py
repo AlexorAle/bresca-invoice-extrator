@@ -67,6 +67,33 @@ def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Datab
             # Registrar inicio de procesamiento
             event_repo.insert_event(drive_file_id, 'ingest_start', 'INFO', f'Iniciando procesamiento de {file_name}')
             
+            # Validar tamaño antes de procesar (si está disponible en metadata)
+            file_size = file_info.get('size')
+            if file_size is not None:
+                try:
+                    file_size = int(file_size)
+                    max_size_mb = int(os.getenv('MAX_PDF_SIZE_MB', '50'))
+                    file_size_mb = file_size / (1024 * 1024)
+                    
+                    if file_size_mb > max_size_mb:
+                        error_msg = f"Archivo excede tamaño máximo permitido: {file_size_mb:.2f} MB > {max_size_mb} MB"
+                        logger.warning(f"Rechazado por tamaño: {file_name} - {error_msg}")
+                        event_repo.insert_event(
+                            drive_file_id,
+                            'file_rejected_size',
+                            'WARNING',
+                            error_msg
+                        )
+                        stats['fallidos'] += 1
+                        stats['archivos_procesados'].append({
+                            'file_name': file_name,
+                            'status': 'rejected_size',
+                            'error': error_msg
+                        })
+                        continue
+                except (ValueError, TypeError):
+                    pass  # Si no se puede parsear, continuar (no bloquear)
+            
             # Validar archivo
             # Convertir tamaño a int si viene como string desde Drive API
             expected_size = file_info.get('size')

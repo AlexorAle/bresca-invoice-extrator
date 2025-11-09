@@ -130,21 +130,62 @@ class DriveClient:
             logger.error(f"Error listando archivos en carpeta {folder_id}: {e}")
             raise
     
+    def validate_file_size(self, file_size: int, max_size_mb: int = None) -> tuple:
+        """
+        Validar tamaño de archivo antes de descargar
+        
+        Args:
+            file_size: Tamaño del archivo en bytes
+            max_size_mb: Tamaño máximo permitido en MB (default desde env)
+        
+        Returns:
+            Tuple (is_valid, error_message)
+        """
+        if max_size_mb is None:
+            max_size_mb = int(os.getenv('MAX_PDF_SIZE_MB', '50'))
+        
+        if file_size is None:
+            # Si no hay información de tamaño, permitir (puede ser archivo sin metadata)
+            return True, None
+        
+        try:
+            file_size_mb = file_size / (1024 * 1024)  # Convertir bytes a MB
+            
+            if file_size_mb > max_size_mb:
+                error_msg = f"Archivo excede tamaño máximo permitido: {file_size_mb:.2f} MB > {max_size_mb} MB"
+                logger.warning(error_msg)
+                return False, error_msg
+            
+            return True, None
+        
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Error validando tamaño de archivo: {e}")
+            # Si hay error parseando, permitir (no bloquear por error de validación)
+            return True, None
+    
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10)
     )
-    def download_file(self, file_id: str, dest_path: str) -> bool:
+    def download_file(self, file_id: str, dest_path: str, file_size: int = None) -> bool:
         """
         Descargar archivo de Google Drive
         
         Args:
             file_id: ID del archivo en Google Drive
             dest_path: Ruta de destino local
+            file_size: Tamaño del archivo en bytes (opcional, para validación)
         
         Returns:
             True si la descarga fue exitosa, False en caso contrario
         """
+        # Validar tamaño antes de descargar
+        if file_size is not None:
+            is_valid, error_msg = self.validate_file_size(file_size)
+            if not is_valid:
+                logger.error(f"No se descargará archivo {file_id}: {error_msg}")
+                return False
+        
         try:
             request = self.service.files().get_media(fileId=file_id)
             
@@ -172,6 +213,56 @@ class DriveClient:
         except Exception as e:
             logger.error(f"Error descargando archivo {file_id}: {e}")
             return False
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
+    def get_file_by_id(self, file_id: str) -> Optional[dict]:
+        """
+        Obtener metadata de archivo por ID (para reprocesamiento)
+        
+        Args:
+            file_id: drive_file_id de la factura
+        
+        Returns:
+            Diccionario con metadata del archivo (compatible con process_batch)
+            o None si no se encuentra
+        """
+        try:
+            file_metadata = self.service.files().get(
+                fileId=file_id,
+                fields='id, name, mimeType, size, modifiedTime, parents'
+            ).execute()
+            
+            # Obtener nombre de carpeta si es posible
+            folder_name = None
+            parents = file_metadata.get('parents', [])
+            if parents:
+                try:
+                    parent_metadata = self.service.files().get(
+                        fileId=parents[0],
+                        fields='name'
+                    ).execute()
+                    folder_name = parent_metadata.get('name')
+                except Exception:
+                    pass  # Si no se puede obtener, dejar como None
+            
+            result = {
+                'id': file_metadata.get('id'),
+                'name': file_metadata.get('name'),
+                'mimeType': file_metadata.get('mimeType'),
+                'size': file_metadata.get('size'),
+                'modifiedTime': file_metadata.get('modifiedTime'),
+                'folder_name': folder_name or 'unknown'
+            }
+            
+            logger.debug(f"Metadata obtenida para archivo {file_id}: {result.get('name')}")
+            return result
+        
+        except Exception as e:
+            logger.error(f"Error obteniendo metadata de archivo {file_id}: {e}")
+            return None
     
     def get_files_from_months(self, months: List[str], base_folder_id: str = None) -> Dict[str, List[dict]]:
         """
