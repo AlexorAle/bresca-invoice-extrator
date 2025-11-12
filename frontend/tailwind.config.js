@@ -6,6 +6,10 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'ipad': '1024px',  // Custom breakpoint para iPad
+        'lg': '1280px',    // Desktop real (cambiar de 1024px para evitar conflicto con ipad)
+      },
       colors: {
         'primary': '#667eea',
         'primary-dark': '#764ba2',

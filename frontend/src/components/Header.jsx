@@ -7,13 +7,13 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
   const years = Array.from({ length: currentYear - 2020 + 2 }, (_, i) => 2020 + i);
 
   return (
-    <div className="bg-white rounded-[20px] shadow-header p-3 sm:p-4 md:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8 flex flex-col">
+    <div className="bg-white border-b border-gray-200 rounded-[20px] shadow-header p-3 sm:p-4 md:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8 flex flex-col">
       {/* Título en la parte superior */}
       <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 break-words">
+        <h1 className="text-xl sm:text-2xl md:text-2xl font-bold text-gray-900 mb-1 sm:mb-2 break-words">
           🧾 Dashboard de Facturación
         </h1>
-        <p className="text-xs sm:text-sm md:text-base text-gray-600">
+        <p className="text-sm text-gray-500">
           Vista mensual - Actualizado en tiempo real
         </p>
       </div>
@@ -36,7 +36,7 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
 
       {/* Los doce meses del año en la parte inferior */}
       <div className="month-selector bg-gray-50 p-1.5 sm:p-2 rounded-xl mt-auto">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto md:overflow-x-visible scrollbar-hide pb-1">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto ipad:overflow-x-auto lg:overflow-x-visible scrollbar-hide pb-1">
           {MONTH_NAMES_SHORT.map((month, index) => {
             const monthNumber = index + 1;
             const isActive = selectedMonth === monthNumber;

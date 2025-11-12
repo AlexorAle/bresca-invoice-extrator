@@ -8,6 +8,8 @@ export const KPICard = React.memo(({
   label, 
   change, 
   background,
+  bgColor = 'bg-white', // Color de fondo de la tarjeta
+  textColor = 'text-gray-900', // Color de texto principal
   type = 'number' // 'number', 'currency', 'percentage'
 }) => {
   // Formatear valor según tipo
@@ -35,7 +37,7 @@ export const KPICard = React.memo(({
 
   return (
     <div 
-      className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-card hover:shadow-card-hover transform hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+      className={`${bgColor} border border-gray-200 p-4 sm:p-6 lg:p-8 rounded-lg shadow-card hover:shadow-card-hover transform hover:-translate-y-1 transition-all duration-300 relative overflow-hidden`}
       role="region"
       aria-label={`KPI de ${label}`}
     >
@@ -51,12 +53,12 @@ export const KPICard = React.memo(({
       </div>
 
       {/* Valor principal */}
-      <div className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
+      <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold ${textColor} mb-2`}>
         {formattedValue}
       </div>
 
       {/* Label */}
-      <div className="text-sm sm:text-base lg:text-lg text-gray-600 font-medium mb-2 sm:mb-3">
+      <div className={`text-sm sm:text-base ${textColor} opacity-80 font-medium mb-2`}>
         {label}
       </div>
 

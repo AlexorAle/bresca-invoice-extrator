@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Header } from './Header';
 import { KPIGrid } from './KPIGrid';
-import { CategoriesPanel } from './CategoriesPanel';
-import { AnalysisGrid } from './AnalysisGrid';
 import { FacturasTable } from './FacturasTable';
 import { LoadingSpinner } from './LoadingSpinner';
 import { useInvoiceData } from '../hooks/useInvoiceData';
+import { sanitizeErrorMessage } from '../utils/api';
 
 export default function Dashboard() {
   // Cambiar mes por defecto a julio (7) donde están las facturas procesadas
@@ -16,12 +15,27 @@ export default function Dashboard() {
   const { data, loading, error } = useInvoiceData(selectedMonth, selectedYear);
 
   if (error) {
+    // Formatear mensaje de error de forma legible
+    let errorMessage = 'Error desconocido';
+    if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    } else if (Array.isArray(error)) {
+      errorMessage = error.map(e => typeof e === 'string' ? e : e?.message || JSON.stringify(e)).join(', ');
+    } else if (error && typeof error === 'object') {
+      errorMessage = error.message || error.detail || JSON.stringify(error);
+    }
+    
+    // Sanitizar el mensaje de error para ocultar detalles técnicos
+    errorMessage = sanitizeErrorMessage(errorMessage);
+    
     return (
-      <div className="min-h-screen bg-gradient-dashboard flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div className="bg-white rounded-2xl shadow-header p-6 sm:p-8 max-w-md text-center mx-4">
           <div className="text-6xl mb-4">❌</div>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Error de Conexión</h2>
-          <p className="text-lg text-gray-600 mb-4">{error}</p>
+          <p className="text-lg text-gray-600 mb-4 break-words">{errorMessage}</p>
           <button
             onClick={() => window.location.reload()}
             className="bg-gradient-active text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all text-lg"
@@ -34,8 +48,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-dashboard p-2 sm:p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6">
+    <div className="min-h-screen bg-white p-2 sm:p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 ipad:px-8 lg:px-10">
         <Header 
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
@@ -48,14 +62,10 @@ export default function Dashboard() {
         ) : (
           <>
             <KPIGrid data={data?.kpis} loading={loading} />
-            <CategoriesPanel categories={data?.categories} />
-            <AnalysisGrid 
-              quality={data?.quality}
-              failedInvoices={data?.failedInvoices}
-            />
             <div className="mt-4 sm:mt-6">
               <FacturasTable 
                 facturas={data?.allFacturas} 
+                failedInvoices={data?.failedInvoices}
                 loading={loading}
               />
             </div>
