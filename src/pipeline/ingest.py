@@ -18,9 +18,9 @@ from src.pdf_utils import validate_pdf, cleanup_temp_file
 from src.logging_conf import get_logger
 from src.pipeline.duplicate_manager import DuplicateManager, DuplicateDecision
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
-def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Database) -> dict:
+def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Database, force_reprocess: bool = False) -> dict:
     """
     Procesar un lote de archivos de facturas con detección de duplicados
     
@@ -28,6 +28,7 @@ def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Datab
         files_list: Lista de diccionarios con info de archivos (debe incluir 'local_path')
         extractor: Instancia de InvoiceExtractor
         db: Instancia de Database
+        force_reprocess: Si es True, permite reprocesar archivos existentes en estado 'revisar' o 'error'
     
     Returns:
         Diccionario con estadísticas del procesamiento
@@ -226,7 +227,8 @@ def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Datab
                 factura_dto,
                 existing_by_file_id,
                 existing_by_hash,
-                existing_by_number
+                existing_by_number,
+                force_reprocess=force_reprocess
             )
             
             logger.info(
@@ -423,14 +425,29 @@ def handle_failure(file_info: dict, error: Exception):
         shutil.move(local_path, quarantine_file)
         
         # Crear archivo de metadatos con el error
+        # Intentar extraer fecha_emision si está disponible en factura_dto
+        fecha_emision = None
+        if 'factura_dto' in locals() and factura_dto:
+            fecha_emision = factura_dto.get('fecha_emision')
+            if fecha_emision:
+                # Convertir a string ISO si es date/datetime
+                if hasattr(fecha_emision, 'isoformat'):
+                    fecha_emision = fecha_emision.isoformat()
+        
         meta_file = quarantine_file.with_suffix('.meta.json')
+        metadata = {
+            'file_info': file_info,
+            'error': str(error),
+            'timestamp': timestamp,
+            'quarantined_at': datetime.utcnow().isoformat()
+        }
+        
+        # Agregar fecha_emision si está disponible
+        if fecha_emision:
+            metadata['fecha_emision'] = fecha_emision
+        
         with open(meta_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                'file_info': file_info,
-                'error': str(error),
-                'timestamp': timestamp,
-                'quarantined_at': datetime.utcnow().isoformat()
-            }, f, indent=2, ensure_ascii=False)
+            json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
         
         logger.warning(f"Archivo movido a cuarentena: {quarantine_file}")
     

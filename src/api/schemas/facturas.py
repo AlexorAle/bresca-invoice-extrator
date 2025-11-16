@@ -80,6 +80,7 @@ class SyncStatusResponse(BaseModel):
 class FailedInvoiceItem(BaseModel):
     """Item del array failed"""
     nombre: str = Field(..., description="Nombre del archivo fallido")
+    razon: Optional[str] = Field(None, description="Razón por la que fue enviada a cuarentena o marcada como fallida")
 
 
 class FailedInvoicesResponse(BaseModel):
@@ -91,6 +92,7 @@ class FacturaListItem(BaseModel):
     """Item de la lista completa de facturas"""
     id: int = Field(..., description="ID de la factura")
     proveedor_nombre: Optional[str] = Field(None, description="Nombre del proveedor")
+    categoria: Optional[str] = Field(None, description="Categoría (nombre de carpeta)")
     fecha_emision: Optional[str] = Field(None, description="Fecha de emisión (ISO format)")
     impuestos_total: float = Field(0.0, description="Total de impuestos")
     importe_total: float = Field(0.0, description="Total pagado")

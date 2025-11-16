@@ -7,7 +7,7 @@ export function FailedInvoicesPanel({ failedInvoices }) {
         <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-900 mb-3 sm:mb-4 lg:mb-6">
           ⚠️ Facturas No Procesadas
         </h3>
-        <p className="text-sm sm:text-base text-gray-600">✅ No hay facturas fallidas en este período</p>
+        <p className="text-sm sm:text-base text-gray-600">✅ No hay facturas que requieran revisión</p>
       </div>
     );
   }
@@ -18,7 +18,7 @@ export function FailedInvoicesPanel({ failedInvoices }) {
         ⚠️ Facturas No Procesadas
       </h3>
       <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 lg:mb-6">
-        Archivos que requieren revisión manual
+        Archivos que requieren revisión manual (todas las facturas fallidas, sin filtro de mes)
       </p>
 
       <div className="space-y-2">

@@ -1,4 +1,5 @@
 # Dockerfile for Invoice Extractor Frontend (Vite + React)
+# ✅ Sin Nginx - usando servidor HTTP simple (serve)
 FROM node:20-alpine AS base
 
 # Install dependencies only when needed
@@ -23,53 +24,21 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 # Build Vite
 RUN npm run build
 
-# Production image with Nginx
-FROM nginx:alpine AS runner
-WORKDIR /usr/share/nginx/html
+# Production image with serve (servidor HTTP simple, sin Nginx)
+FROM base AS runner
+WORKDIR /app
 
-# Remove default nginx static assets
-RUN rm -rf ./*
+# Instalar serve globalmente
+RUN npm install -g serve
 
-# Copy built assets
-COPY --from=builder /app/dist .
+# Copiar archivos construidos
+COPY --from=builder /app/dist ./dist
 
-# Copy nginx configuration for SPA routing with base path
-# Traefik NO hace stripPrefix según docker-compose, así que nginx recibe /invoice-dashboard/...
-# Vite construye con base: /invoice-dashboard/, así que los archivos están en la raíz pero el HTML referencia /invoice-dashboard/...
-# Necesitamos servir los assets desde la raíz cuando se piden con el prefijo
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    \
-    # Servir assets estáticos cuando vienen con prefijo /invoice-dashboard/assets/ \
-    location ~* ^/invoice-dashboard/assets/(.+)$ { \
-        alias /usr/share/nginx/html/assets/$1; \
-        expires 1y; \
-        add_header Cache-Control "public, immutable"; \
-        access_log off; \
-    } \
-    \
-    # Servir otros archivos estáticos con prefijo (vite.svg, etc) \
-    location ~* ^/invoice-dashboard/([^/]+\\.(svg|ico|png|jpg|jpeg|gif|woff|woff2|ttf|eot))$ { \
-        alias /usr/share/nginx/html/$1; \
-        expires 1y; \
-        add_header Cache-Control "public, immutable"; \
-    } \
-    \
-    # Servir index.html para todas las rutas del dashboard (SPA routing) \
-    location ~* ^/invoice-dashboard(/.*)?$ { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    \
-    # Redirigir raíz a /invoice-dashboard/ \
-    location = / { \
-        return 301 /invoice-dashboard/; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
-
+# Exponer puerto 80 (serve puede usar cualquier puerto)
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
-
+# Usar serve para servir los archivos estáticos
+# -s: SPA mode (servir index.html para todas las rutas)
+# -l: puerto a escuchar
+# -n: no mostrar banner
+CMD ["serve", "-s", "dist", "-l", "80", "-n"]

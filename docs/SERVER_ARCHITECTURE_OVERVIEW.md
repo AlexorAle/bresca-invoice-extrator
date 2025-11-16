@@ -1,6 +1,6 @@
 # Arquitectura del Servidor - Visión General
 
-**Última actualización:** 2025-11-12  
+**Última actualización:** 2025-11-13  
 **Servidor:** VPS (82.25.101.32)  
 **Ubicación de proyectos:** `~/proyectos`
 
@@ -48,7 +48,7 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **URL externa:**
   - Dashboard: `http://82.25.101.32/bot`
   - API: `http://82.25.101.32/api/trading`
-- **Estado:** Activo
+- **Estado:** Activo (Preparado para Live Test - 99% completitud)
 
 #### Stack tecnológico
 - **Backend:** Python 3.12
@@ -56,6 +56,18 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - Framework web: FastAPI (implícito en docker-compose)
   - Bot de Telegram: `python-telegram-bot`
   - Dashboard: Streamlit 1.50.0
+- **Sistema de Live Test:**
+  - Logger unificado: `backtrader_engine/live_test_logger.py` (formato JSON Lines)
+  - Emergency stop: `backtrader_engine/emergency_stop.py` (protección automática)
+  - Market snapshots: `backtrader_engine/market_snapshot_logger.py` (análisis de mercado)
+  - Documentación automática: `backtrader_engine/live_test_documentation.py`
+  - Configuración: `backtrader_engine/configs/configlivetest.json`
+- **Scripts de Automatización:**
+  - `scripts/cleanup_pre_live_test.py` (limpieza y archivado)
+  - `scripts/start_live_test.sh` (script maestro de inicio)
+  - `scripts/daily_morning_check.sh` (checklist diario mañana)
+  - `scripts/daily_evening_check.sh` (checklist diario tarde)
+  - `scripts/analyze_post_mortem.py` (análisis post-mortem completo)
 - **Base de datos:** PostgreSQL 15 (contenedor `postgres`)
 - **Cache:** Redis 7 (contenedor `redis`)
 - **Monitoreo:** Prometheus + Grafana
@@ -64,6 +76,12 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 #### Componentes y arquitectura
 - **Trading Bot Service:** Motor de trading con estrategias, gestión de riesgo, ejecución de órdenes
 - **Streamlit Dashboard:** Visualización de métricas, logs, estado del bot
+- **Sistema de Logging Unificado:** Logger específico para live test (`live_test_logger.py`) con archivo único `livetradingYYYYMMDDHHMMSS.log` en formato JSON Lines
+- **Emergency Stop System:** Sistema automático de parada de emergencia (`emergency_stop.py`) con monitoreo de drawdown (15%) y pérdida diaria (5%)
+- **Market Snapshot Logger:** Snapshots periódicos de mercado para análisis (`market_snapshot_logger.py`)
+- **Métricas Mejoradas:** Collector mejorado (`metrics_collector.py`) con métricas de señales rechazadas y tasa de rechazo
+- **Análisis Post-Mortem:** Suite completa de análisis (`analyze_post_mortem.py`) para evaluación post-live test
+- **Scripts de Automatización:** Scripts de limpieza, inicio, checklist diario y análisis automatizados
 - **Prometheus:** Métricas de rendimiento y trading
 - **Grafana:** Dashboards de visualización
 - **Redis:** Cache de datos de mercado y estado de sesión
@@ -106,6 +124,11 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - `~/proyectos/bot-trading/.env` (configuración principal)
   - `~/proyectos/bot-trading/infrastructure/.env` (configuración de infraestructura)
   - `~/proyectos/bot-trading/.env.example` (template)
+- **Configuración Live Test:**
+  - `backtrader_engine/configs/configlivetest.json` (configuración específica para live test de 7 días)
+  - Límites de riesgo: drawdown máximo 15%, pérdida diaria máxima 5%
+  - Emergency stop habilitado
+  - Logging extendido activado
 - **Variables críticas:**
   - `EXCHANGE`, `API_KEY`, `SECRET` (credenciales de exchange)
   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (notificaciones)
@@ -115,13 +138,18 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Recomendaciones:**
   - Usar gestor de secretos (HashiCorp Vault, AWS Secrets Manager) para producción
   - Separar config por entorno (dev/staging/prod)
+  - Revisar configuración de live test antes de iniciar prueba de 7 días
 
 #### Mantenimiento y tareas sugeridas
-- Limpieza periódica de logs antiguos en `logs/`
+- Limpieza periódica de logs antiguos en `logs/` (usar `scripts/cleanup_pre_live_test.py` para archivado automático)
 - Revisión y archivo de ramas cursor/* obsoletas
 - Rotación de backups en `backups/`
 - Actualización de dependencias Python (especialmente `ccxt` para soporte de exchanges)
 - Revisión de métricas de Prometheus (retention: 30 días configurado)
+- **Live Test:** Ejecutar checklist diario (`scripts/daily_morning_check.sh` y `scripts/daily_evening_check.sh`)
+- **Post-Live Test:** Ejecutar análisis post-mortem (`scripts/analyze_post_mortem.py --days 7`) para evaluación completa
+- Monitoreo de emergency stop: verificar que los límites de drawdown (15%) y pérdida diaria (5%) estén configurados correctamente
+- Revisión de logs de live test: analizar `logs/livetrading*.log` para identificar patrones y mejoras
 
 ---
 
@@ -227,6 +255,7 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - Consolidación de rama `backup/migracion` si la migración está completa
 - Monitoreo de rate limits de CoinMarketCap y Twelve Data
 - Actualización de dependencias (Next.js, React, FastAPI)
+- **Mejoras recientes:** Correcciones en visualización de gráficos y manejo de datos (commits recientes)
 
 ---
 
@@ -442,11 +471,12 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Backend (FastAPI):**
   - API REST bajo `/api/*`
   - Acceso a Docker socket para gestión de contenedores
-  - Lectura de logs del trading bot
+  - Lectura de logs del trading bot (mejoras en visualización y parsing de logs)
   - Gestión de docker-compose del trading bot
+  - Sistema mejorado de logging y monitoreo de logs
 - **Frontend (React):**
   - Dashboard de control
-  - Visualización de logs
+  - Visualización de logs mejorada
   - Gestión de servicios
 
 #### Ejecución y despliegue
@@ -490,6 +520,7 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - Actualización de dependencias
 - Verificación de seguridad (autenticación en API)
 - Backup de configuraciones
+- **Mejoras recientes:** Sistema mejorado de visualización y parsing de logs del trading bot
 
 ---
 

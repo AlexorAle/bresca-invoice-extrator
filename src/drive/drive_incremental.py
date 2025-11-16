@@ -11,7 +11,7 @@ from googleapiclient.errors import HttpError
 from src.drive_client import DriveClient
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 
 class DriveIncrementalClient(DriveClient):
@@ -31,11 +31,13 @@ class DriveIncrementalClient(DriveClient):
         self.retry_max = int(os.getenv('DRIVE_RETRY_MAX', '5'))
         self.retry_base_ms = int(os.getenv('DRIVE_RETRY_BASE_MS', '500'))
         self.sync_window_minutes = int(os.getenv('SYNC_WINDOW_MINUTES', '1440'))  # 24h por defecto
+        self.process_all_files = os.getenv('PROCESS_ALL_FILES', 'false').lower() == 'true'
         
         logger.info(
             f"DriveIncrementalClient inicializado: "
             f"page_size={self.page_size}, retry_max={self.retry_max}, "
-            f"sync_window={self.sync_window_minutes}min"
+            f"sync_window={self.sync_window_minutes}min, "
+            f"process_all_files={self.process_all_files}"
         )
     
     def _build_incremental_query(
@@ -55,15 +57,25 @@ class DriveIncrementalClient(DriveClient):
         Returns:
             Query string para Drive API
         """
-        # Formatear timestamp en RFC 3339
-        since_time_str = since_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        
-        query = (
-            f"'{folder_id}' in parents and "
-            f"mimeType = '{mime_type}' and "
-            f"modifiedTime > '{since_time_str}' and "
-            f"trashed = false"
-        )
+        # TEMPORAL: Si PROCESS_ALL_FILES está activo, no filtrar por fecha
+        if self.process_all_files:
+            query = (
+                f"'{folder_id}' in parents and "
+                f"mimeType = '{mime_type}' and "
+                f"trashed = false"
+            )
+            logger.info("MODO TEMPORAL: Procesando TODOS los archivos sin restricciones de fecha")
+        else:
+            # Lógica original activa cuando PROCESS_ALL_FILES=false
+            # Formatear timestamp en RFC 3339
+            since_time_str = since_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            
+            query = (
+                f"'{folder_id}' in parents and "
+                f"mimeType = '{mime_type}' and "
+                f"modifiedTime > '{since_time_str}' and "
+                f"trashed = false"
+            )
         
         logger.debug(f"Query incremental: {query}")
         
@@ -227,23 +239,42 @@ class DriveIncrementalClient(DriveClient):
         # Obtener todas las subcarpetas (incluyendo la raíz)
         all_folder_ids = self._get_all_subfolders(folder_id)
         
-        # Construir query que busque en todas las carpetas
-        # Usar operador OR para buscar en múltiples carpetas
-        since_time_str = adjusted_since.strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        
-        # Si hay muchas subcarpetas, usar una query más eficiente
-        if len(all_folder_ids) == 1:
-            # Solo carpeta raíz, usar query simple
-            query = self._build_incremental_query(folder_id, adjusted_since)
+        # TEMPORAL: Si PROCESS_ALL_FILES está activo, no filtrar por fecha
+        if self.process_all_files:
+            # Construir query sin restricción de fecha
+            if len(all_folder_ids) == 1:
+                query = (
+                    f"'{folder_id}' in parents and "
+                    f"mimeType = 'application/pdf' and "
+                    f"trashed = false"
+                )
+            else:
+                folder_conditions = " or ".join([f"'{fid}' in parents" for fid in all_folder_ids])
+                query = (
+                    f"({folder_conditions}) and "
+                    f"mimeType = 'application/pdf' and "
+                    f"trashed = false"
+                )
+            logger.info("MODO TEMPORAL: Procesando TODOS los archivos sin restricciones de fecha")
         else:
-            # Múltiples carpetas: construir query con OR
-            folder_conditions = " or ".join([f"'{fid}' in parents" for fid in all_folder_ids])
-            query = (
-                f"({folder_conditions}) and "
-                f"mimeType = 'application/pdf' and "
-                f"modifiedTime > '{since_time_str}' and "
-                f"trashed = false"
-            )
+            # Lógica original activa cuando PROCESS_ALL_FILES=false
+            # Construir query que busque en todas las carpetas
+            # Usar operador OR para buscar en múltiples carpetas
+            since_time_str = adjusted_since.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            
+            # Si hay muchas subcarpetas, usar una query más eficiente
+            if len(all_folder_ids) == 1:
+                # Solo carpeta raíz, usar query simple
+                query = self._build_incremental_query(folder_id, adjusted_since)
+            else:
+                # Múltiples carpetas: construir query con OR
+                folder_conditions = " or ".join([f"'{fid}' in parents" for fid in all_folder_ids])
+                query = (
+                    f"({folder_conditions}) and "
+                    f"mimeType = 'application/pdf' and "
+                    f"modifiedTime > '{since_time_str}' and "
+                    f"trashed = false"
+                )
         
         logger.info(
             f"Iniciando búsqueda incremental en {len(all_folder_ids)} carpetas "

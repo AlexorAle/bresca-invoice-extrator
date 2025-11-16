@@ -17,7 +17,7 @@ from enum import Enum
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 class DuplicateDecision(Enum):
     """Decisiones posibles para duplicados"""
@@ -49,9 +49,14 @@ class DuplicateManager:
         factura_dto: dict,
         existing_by_file_id: Optional[dict],
         existing_by_hash: Optional[dict],
-        existing_by_number: Optional[dict]
+        existing_by_number: Optional[dict],
+        force_reprocess: bool = False
     ) -> Tuple[DuplicateDecision, str]:
-        """Decidir acción basándose en facturas existentes"""
+        """Decidir acción basándose en facturas existentes
+        
+        Args:
+            force_reprocess: Si es True, permite reprocesar archivos existentes en estado 'revisar' o 'error'
+        """
         drive_file_id = factura_dto.get('drive_file_id')
         hash_contenido = factura_dto.get('hash_contenido')
         proveedor = factura_dto.get('proveedor_text', '')
@@ -60,11 +65,20 @@ class DuplicateManager:
         
         if existing_by_file_id:
             existing_hash = existing_by_file_id.get('hash_contenido')
+            existing_estado = existing_by_file_id.get('estado')
             
+            # Si el hash cambió, siempre actualizar
             if hash_contenido and existing_hash and hash_contenido != existing_hash:
                 return (
                     DuplicateDecision.UPDATE_REVISION,
                     f"Archivo modificado: hash cambió"
+                )
+            
+            # Si force_reprocess está activado y el estado es 'revisar' o 'error', permitir reprocesamiento
+            if force_reprocess and existing_estado in ['revisar', 'error']:
+                return (
+                    DuplicateDecision.UPDATE_REVISION,
+                    f"Reprocesamiento forzado: archivo en estado '{existing_estado}'"
                 )
             
             return (
@@ -127,6 +141,14 @@ class DuplicateManager:
             shutil.copy2(local_path, quarantine_file)
             
             meta_file = quarantine_file.with_suffix('.meta.json')
+            
+            # Extraer fecha_emision del factura_dto
+            fecha_emision = factura_dto.get('fecha_emision')
+            if fecha_emision:
+                # Convertir a string ISO si es date/datetime
+                if hasattr(fecha_emision, 'isoformat'):
+                    fecha_emision = fecha_emision.isoformat()
+            
             metadata = {
                 'timestamp': timestamp,
                 'decision': decision.value,
@@ -140,8 +162,20 @@ class DuplicateManager:
                     'importe_total': str(factura_dto.get('importe_total')) if factura_dto.get('importe_total') else None,
                     'hash_contenido': factura_dto.get('hash_contenido')
                 },
-                'quarantined_at': datetime.utcnow().isoformat()
+                'quarantined_at': datetime.utcnow().isoformat(),
+                # Guardar file_info completo para tener acceso a modifiedTime
+                'file_info': {
+                    'name': file_name,
+                    'id': drive_file_id,
+                    'modifiedTime': file_info.get('modifiedTime'),  # Guardar fecha de modificación de Drive
+                    'createdTime': file_info.get('createdTime'),
+                    'size': file_info.get('size')
+                }
             }
+            
+            # Agregar fecha_emision al nivel raíz del metadata para fácil acceso
+            if fecha_emision:
+                metadata['fecha_emision'] = fecha_emision
             
             with open(meta_file, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)

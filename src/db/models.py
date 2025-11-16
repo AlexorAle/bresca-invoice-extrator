@@ -1,7 +1,7 @@
 """
 Modelos SQLAlchemy para las tablas de la base de datos
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Text, ForeignKey, CheckConstraint, DECIMAL, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Text, ForeignKey, CheckConstraint, DECIMAL, Index, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -61,6 +61,9 @@ class Factura(Base):
     reprocessed_at = Column(DateTime)
     reprocess_reason = Column(Text)
     
+    # Campo para archivos eliminados de Drive
+    deleted_from_drive = Column(Boolean, default=False)
+    
     creado_en = Column(DateTime, default=datetime.utcnow)
     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -80,6 +83,7 @@ class Factura(Base):
         Index('idx_facturas_proveedor_numero', 'proveedor_text', 'numero_factura'),
         Index('idx_facturas_estado', 'estado'),
         Index('idx_facturas_drive_modified', 'drive_modified_time'),
+        Index('idx_facturas_deleted', 'deleted_from_drive', postgresql_where=(deleted_from_drive == True)),
     )
 
 class IngestEvent(Base):

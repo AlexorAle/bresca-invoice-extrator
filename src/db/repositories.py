@@ -11,7 +11,7 @@ from .models import Factura, Proveedor, IngestEvent, SyncState
 from .database import Database
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 class FacturaRepository:
     """Repositorio para operaciones con facturas"""
@@ -493,6 +493,7 @@ class FacturaRepository:
                 {
                     'id': f.id,
                     'proveedor_nombre': f.proveedor_text,
+                    'categoria': f.drive_folder_name,  # Nombre de la carpeta = categoría
                     'fecha_emision': f.fecha_emision.isoformat() if f.fecha_emision else None,
                     'impuestos_total': float(f.impuestos_total) if f.impuestos_total else 0.0,
                     'importe_total': float(f.importe_total) if f.importe_total else 0.0
@@ -700,6 +701,80 @@ class FacturaRepository:
                 return True
             
             return False
+    
+    def cleanup_stuck_pending_invoices(self, hours: int = 24) -> int:
+        """
+        Cambiar facturas en estado 'pendiente' > X horas a 'error'
+        
+        Args:
+            hours: Horas antes de marcar como error (default: 24)
+        
+        Returns:
+            Número de facturas actualizadas
+        """
+        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        
+        with self.db.get_session() as session:
+            facturas = session.query(Factura).filter(
+                Factura.estado == 'pendiente',
+                Factura.actualizado_en < cutoff_time
+            ).all()
+            
+            count = len(facturas)
+            
+            for factura in facturas:
+                factura.estado = 'error'
+                factura.error_msg = f'Factura en pendiente > {hours}h, marcada como error'
+                factura.actualizado_en = datetime.utcnow()
+            
+            if count > 0:
+                session.commit()
+                logger.info(f"Limpieza de facturas pendientes: {count} facturas marcadas como error")
+            
+            return count
+    
+    def get_facturas_en_cuarentena_para_reprocesar(
+        self,
+        max_dias: int = 30,
+        limite: int = 50
+    ) -> List[dict]:
+        """
+        Obtener facturas en cuarentena (estado 'error' o 'revisar') que fueron modificadas en Drive
+        
+        Args:
+            max_dias: Solo facturas de últimos N días
+            limite: Máximo de facturas a retornar
+        
+        Returns:
+            Lista de facturas con drive_file_id y metadata necesaria
+        """
+        with self.db.get_session() as session:
+            # Calcular fecha límite
+            fecha_limite = datetime.utcnow() - timedelta(days=max_dias)
+            
+            # Query: facturas en estado problemático, últimos N días
+            facturas = session.query(Factura).filter(
+                Factura.estado.in_(['error', 'revisar']),
+                Factura.actualizado_en >= fecha_limite,
+                Factura.deleted_from_drive == False
+            ).order_by(
+                Factura.actualizado_en.desc()
+            ).limit(limite).all()
+            
+            return [
+                {
+                    'id': f.id,
+                    'drive_file_id': f.drive_file_id,
+                    'drive_file_name': f.drive_file_name,
+                    'drive_folder_name': f.drive_folder_name,
+                    'estado': f.estado,
+                    'error_msg': f.error_msg,
+                    'reprocess_attempts': f.reprocess_attempts or 0,
+                    'actualizado_en': f.actualizado_en,
+                    'drive_modified_time': f.drive_modified_time
+                }
+                for f in facturas
+            ]
 
 class EventRepository:
     """Repositorio para eventos de auditoría"""

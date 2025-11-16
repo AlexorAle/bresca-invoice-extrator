@@ -1,0 +1,67 @@
+═══════════════════════════════════════════════════════════════
+RESUMEN EJECUTIVO - CAMBIOS FRONTEND INVOICE EXTRACTOR
+═══════════════════════════════════════════════════════════════
+
+FECHA: 2025-11-12
+OBJETIVO: Configurar frontend de forma robusta y reproducible
+
+───────────────────────────────────────────────────────────────
+ESTADO ACTUAL (ANTES)
+───────────────────────────────────────────────────────────────
+❌ vite.config.js: base: './' (rutas relativas)
+❌ Problemas con rutas internas de React Router
+❌ Assets no cargaban después de rebuilds
+❌ Inconsistencia entre builds
+
+───────────────────────────────────────────────────────────────
+CAMBIOS REALIZADOS
+───────────────────────────────────────────────────────────────
+✅ vite.config.js: base: '/invoice-dashboard/' (rutas absolutas)
+✅ Documentación actualizada en docker-compose.yml
+✅ Creada guía completa: docs/FRONTEND_DEPLOYMENT_GUIDE.md
+✅ Creado resumen: docs/RESUMEN_CAMBIOS_FRONTEND.md
+
+───────────────────────────────────────────────────────────────
+NUEVO MODO (CONFIGURACIÓN ROBUSTA)
+───────────────────────────────────────────────────────────────
+✅ Vite: base: '/invoice-dashboard/' (rutas absolutas)
+✅ Traefik: PathPrefix + stripPrefix configurado
+✅ Container: serve -s dist -l 80 -n (modo SPA)
+✅ Build: Reproducible y consistente
+
+FLUJO DE RUTAS:
+Browser → /invoice-dashboard/assets/... 
+        → Traefik (strip prefix) 
+        → /assets/... 
+        → Container ✅
+
+───────────────────────────────────────────────────────────────
+VENTAJAS
+───────────────────────────────────────────────────────────────
+✅ Builds siempre funcionan igual
+✅ React Router funciona correctamente
+✅ Sin problemas de caché de assets
+✅ Compatible con arquitectura multi-proyecto
+✅ Documentación completa para futuros cambios
+
+───────────────────────────────────────────────────────────────
+PROCESO PARA CAMBIOS FUTUROS
+───────────────────────────────────────────────────────────────
+1. Hacer cambios en código
+2. Rebuild: docker build --no-cache -t infrastructure-invoice-frontend .
+3. Deploy: docker-compose up -d invoice-frontend
+4. Verificar: curl -H "Host: 82.25.101.32" http://localhost/invoice-dashboard/
+
+⚠️ REGLAS DE ORO:
+- NUNCA cambiar base en vite.config.js (debe ser '/invoice-dashboard/')
+- NUNCA quitar strip prefix en Traefik
+- SIEMPRE hacer rebuild después de cambios
+- SIEMPRE verificar que assets cargan
+
+───────────────────────────────────────────────────────────────
+DOCUMENTACIÓN
+───────────────────────────────────────────────────────────────
+📄 docs/FRONTEND_DEPLOYMENT_GUIDE.md - Guía completa
+📄 docs/RESUMEN_CAMBIOS_FRONTEND.md - Resumen detallado
+
+═══════════════════════════════════════════════════════════════

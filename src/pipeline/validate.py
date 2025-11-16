@@ -8,7 +8,7 @@ from src.db.database import Database
 from src.db.repositories import FacturaRepository
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 def validate_business_rules(factura: dict) -> bool:
     """

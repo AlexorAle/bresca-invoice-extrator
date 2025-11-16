@@ -97,4 +97,20 @@
   .shadow-button-active {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
   }
+
+  /* Animación para dropdown */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-\[fadeIn_0\.3s_ease-out\] {
+    animation: fadeIn 0.3s ease-out;
+  }
 }

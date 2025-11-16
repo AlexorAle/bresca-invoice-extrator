@@ -11,7 +11,7 @@ from typing import Generator
 from .models import Base
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 class Database:
     """Gestión de conexión a PostgreSQL"""

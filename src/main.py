@@ -24,7 +24,7 @@ from pipeline.validate import sanitize_filename
 load_env()
 validate_secrets()
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 class InvoiceProcessor:
     """Procesador principal de facturas"""

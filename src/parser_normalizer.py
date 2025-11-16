@@ -6,10 +6,16 @@ from datetime import datetime, timedelta, date
 from typing import Optional, Dict
 from decimal import Decimal
 
+try:
+    import dateparser
+    DATEPARSER_AVAILABLE = True
+except ImportError:
+    DATEPARSER_AVAILABLE = False
+
 from src.logging_conf import get_logger
 from src.utils.hash_generator import generate_content_hash
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 def normalize_date(date_str: str) -> Optional[str]:
     """
@@ -57,6 +63,25 @@ def normalize_date(date_str: str) -> Optional[str]:
             except (ValueError, IndexError) as e:
                 logger.debug(f"No se pudo parsear fecha {date_str} con formato {format_str}: {e}")
                 continue
+    
+    # Si dateparser está disponible, intentar parsear fechas en texto natural
+    if DATEPARSER_AVAILABLE:
+        try:
+            # Configurar dateparser para español
+            parsed_date = dateparser.parse(
+                date_str,
+                languages=['es', 'en'],
+                settings={
+                    'DATE_ORDER': 'DMY',  # Día-Mes-Año (formato español)
+                    'PREFER_DAY_OF_MONTH': 'first',
+                    'PREFER_DATES_FROM': 'past'
+                }
+            )
+            
+            if parsed_date:
+                return parsed_date.strftime('%Y-%m-%d')
+        except Exception as e:
+            logger.debug(f"dateparser falló para '{date_str}': {e}")
     
     logger.warning(f"No se pudo normalizar fecha: {date_str}")
     return None

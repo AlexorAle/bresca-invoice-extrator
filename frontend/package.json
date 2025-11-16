@@ -10,9 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.5",
+    "@mui/material": "^7.3.5",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.552.0",
+    "ra-data-simple-rest": "^5.13.1",
     "react": "^19.1.1",
+    "react-admin": "^5.13.1",
     "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.6",
     "recharts": "^3.3.0"
   },
   "devDependencies": {

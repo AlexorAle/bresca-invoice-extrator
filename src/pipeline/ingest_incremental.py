@@ -8,7 +8,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.drive.drive_incremental import DriveIncrementalClient
 from src.drive_client import DriveClient
@@ -19,9 +19,10 @@ from src.db.repositories import FacturaRepository, EventRepository
 from src.pipeline.ingest import process_batch
 from src.pipeline.job_lock import JobLock
 from src.logging_conf import get_logger
+from src.utils.disk_space import check_disk_space
 from filelock import Timeout
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 
 class IncrementalIngestStats:
@@ -123,6 +124,17 @@ class IncrementalIngestPipeline:
         self.reprocess_max_count = int(os.getenv('REPROCESS_REVIEW_MAX_COUNT', '50'))
         self.reprocess_max_attempts = int(os.getenv('REPROCESS_REVIEW_MAX_ATTEMPTS', '3'))
         self.reprocess_dry_run = os.getenv('REPROCESS_REVIEW_DRY_RUN', 'false').lower() == 'true'
+        self.reprocess_include_quarantine = os.getenv('REPROCESS_INCLUDE_QUARANTINE', 'true').lower() == 'true'
+        
+        # Configuración de limpieza de facturas pendientes
+        self.cleanup_pending_hours = int(os.getenv('CLEANUP_PENDING_HOURS', '24'))
+        
+        # Configuración de validación de espacio en disco
+        self.disk_space_warning_percent = int(os.getenv('DISK_SPACE_WARNING_PERCENT', '10'))
+        self.disk_space_critical_percent = int(os.getenv('DISK_SPACE_CRITICAL_PERCENT', '5'))
+        
+        # Modo temporal: procesar todos los archivos sin restricciones de fecha
+        self.process_all_files = os.getenv('PROCESS_ALL_FILES', 'false').lower() == 'true'
         
         # Sistema de lock para prevenir ejecuciones concurrentes
         lock_timeout = int(os.getenv('JOB_LOCK_TIMEOUT_SEC', '300'))  # 5 minutos por defecto
@@ -185,18 +197,49 @@ class IncrementalIngestPipeline:
             Diccionario con estadísticas de ejecución
         """
         try:
+            # Validar espacio en disco
+            has_space, is_critical, available_gb, total_gb = check_disk_space(
+                min_percent=self.disk_space_warning_percent,
+                critical_percent=self.disk_space_critical_percent
+            )
+            
+            if is_critical:
+                error_msg = (
+                    f"Espacio en disco crítico: {available_gb:.2f} GB disponible "
+                    f"({(available_gb/total_gb)*100:.1f}%). "
+                    f"No se procesará ningún archivo."
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            # Limpiar facturas pendientes > X horas
+            cleaned_count = self.factura_repo.cleanup_stuck_pending_invoices(
+                hours=self.cleanup_pending_hours
+            )
+            if cleaned_count > 0:
+                logger.info(f"Limpieza automática: {cleaned_count} facturas en 'pendiente' marcadas como 'error'")
+            
             # Validar acceso a carpeta
             if not self.drive_client.validate_folder_access(self.folder_id):
                 raise ValueError(f"No se puede acceder a carpeta Drive: {self.folder_id}")
             
-            # Obtener último timestamp de sincronización
-            last_sync_time = self.state_store.get_last_sync_time()
-            self.stats.last_sync_time_before = last_sync_time
-            
-            if last_sync_time:
-                logger.info(f"Última sincronización: {last_sync_time.isoformat()}")
+            # TEMPORAL: Si PROCESS_ALL_FILES está activo, ignorar last_sync_time
+            if self.process_all_files:
+                logger.info("="*70)
+                logger.info("MODO TEMPORAL: Procesando TODOS los archivos sin restricciones de fecha")
+                logger.info("="*70)
+                last_sync_time = None  # Forzar a None para procesar todo
+                self.stats.last_sync_time_before = None
             else:
-                logger.info("Primera ejecución: no hay timestamp previo")
+                # Lógica original activa cuando PROCESS_ALL_FILES=false
+                # Obtener último timestamp de sincronización
+                last_sync_time = self.state_store.get_last_sync_time()
+                self.stats.last_sync_time_before = last_sync_time
+                
+                if last_sync_time:
+                    logger.info(f"Última sincronización: {last_sync_time.isoformat()}")
+                else:
+                    logger.info("Primera ejecución: no hay timestamp previo")
             
             # Crear directorio temporal para descargas
             temp_dir = Path(tempfile.mkdtemp(prefix='invoice_incremental_'))
@@ -481,6 +524,11 @@ class IncrementalIngestPipeline:
         """
         Avanzar last_sync_time según estrategia configurada
         """
+        # TEMPORAL: Si PROCESS_ALL_FILES está activo, no actualizar timestamp
+        if self.process_all_files:
+            logger.info("MODO TEMPORAL: No se actualiza last_sync_time (para no marcar todos como procesados)")
+            return
+        
         if self.advance_strategy == 'MAX_OK_TIME':
             # Estrategia recomendada: usar máximo modifiedTime de archivos procesados OK
             if self.stats.max_modified_time_processed:
@@ -534,6 +582,47 @@ class IncrementalIngestPipeline:
             limite=self.reprocess_max_count,
             max_attempts=self.reprocess_max_attempts
         )
+        
+        # Si está habilitado, incluir archivos en cuarentena que fueron modificados
+        if self.reprocess_include_quarantine:
+            cuarentena_facturas = self.factura_repo.get_facturas_en_cuarentena_para_reprocesar(
+                max_dias=self.reprocess_max_days,
+                limite=self.reprocess_max_count
+            )
+            
+            # Filtrar solo los que fueron modificados en Drive después de último procesamiento
+            for factura in cuarentena_facturas:
+                drive_file_id = factura['drive_file_id']
+                actualizado_en = factura['actualizado_en']
+                
+                # Obtener metadata actual desde Drive
+                file_metadata = self.drive_client_base.get_file_by_id(drive_file_id)
+                
+                if file_metadata and file_metadata.get('modifiedTime'):
+                    try:
+                        # Parsear modifiedTime de Drive (ya viene con timezone)
+                        drive_modified = datetime.fromisoformat(
+                            file_metadata['modifiedTime'].replace('Z', '+00:00')
+                        )
+                        
+                        # Asegurar que actualizado_en tenga timezone para comparación
+                        if actualizado_en:
+                            # Si actualizado_en es naive, agregar UTC
+                            if actualizado_en.tzinfo is None:
+                                actualizado_en = actualizado_en.replace(tzinfo=timezone.utc)
+                            
+                            # Comparar ambos con timezone
+                            if drive_modified > actualizado_en:
+                                facturas.append(factura)
+                                logger.debug(
+                                    f"Archivo en cuarentena modificado detectado: {factura['drive_file_name']} "
+                                    f"(Drive: {drive_modified}, BD: {actualizado_en})"
+                                )
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error parseando modifiedTime para {drive_file_id}: {e}")
+            
+            if cuarentena_facturas:
+                logger.info(f"Archivos en cuarentena verificados: {len(cuarentena_facturas)}")
         
         if not facturas:
             logger.info("No hay facturas para reprocesar")
@@ -626,8 +715,8 @@ class IncrementalIngestPipeline:
                     'size': file_metadata.get('size')
                 }
                 
-                # Reprocesar con process_batch
-                batch_stats = process_batch([file_info], self.extractor, self.db)
+                # Reprocesar con process_batch (forzar reprocesamiento para facturas en 'revisar' o 'error')
+                batch_stats = process_batch([file_info], self.extractor, self.db, force_reprocess=True)
                 
                 # Verificar resultado
                 if batch_stats.get('exitosos', 0) > 0:

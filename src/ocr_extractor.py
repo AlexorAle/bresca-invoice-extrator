@@ -16,7 +16,7 @@ import io
 from src.pdf_utils import pdf_to_base64, pdf_to_image
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 # Prompt optimizado para extracción de facturas
 PROMPT_TEMPLATE = """Eres un experto en análisis de facturas. Analiza esta imagen de factura y extrae la información en formato JSON.
@@ -37,13 +37,25 @@ INSTRUCCIONES CRÍTICAS:
 
 4. Busca la FECHA DE EMISIÓN (campos como "Fecha:", "Fecha de emisión:", "Date:", "Issue date:", "Emitida el:", etc.)
 
-5. Si encuentras varios totales, usa el ÚLTIMO o el que indica "Total final" o "Total con IVA"
+5. Busca la BASE IMPONIBLE (campos como "Base imponible:", "Base:", "Subtotal:", "Base IVA:", "Base sin IVA:")
+   - Es el importe SIN impuestos/IVA
+   - Si no encuentras este campo explícito, puedes calcularlo: base_imponible = importe_total / (1 + iva_porcentaje/100)
 
-6. Para el importe, devuelve SOLO el número (sin símbolos de moneda)
+6. Busca el TOTAL DE IMPUESTOS/IVA (campos como "IVA:", "Impuestos:", "Tax:", "Total IVA:", "Impuesto:")
+   - Es la suma de todos los impuestos aplicados
+   - Si no encuentras este campo explícito, puedes calcularlo: impuestos_total = importe_total - base_imponible
 
-7. Para la fecha, devuelve en formato YYYY-MM-DD (ejemplo: 2025-07-15)
+7. Busca el PORCENTAJE DE IVA (campos como "IVA 21%", "21% IVA", "Tax rate:", "Tipo IVA:")
+   - Es el porcentaje de IVA aplicado (ej: 21, 10, 4)
+   - Si no encuentras este campo explícito pero tienes base_imponible e impuestos_total, calcula: iva_porcentaje = (impuestos_total / base_imponible) * 100
 
-8. Indica tu nivel de confianza: "alta" si los datos son claros, "media" si hay ambigüedad, "baja" si hay dudas significativas
+8. Si encuentras varios totales, usa el ÚLTIMO o el que indica "Total final" o "Total con IVA"
+
+9. Para los importes, devuelve SOLO el número (sin símbolos de moneda)
+
+10. Para la fecha, devuelve en formato YYYY-MM-DD (ejemplo: 2025-07-15)
+
+11. Indica tu nivel de confianza: "alta" si los datos son claros, "media" si hay ambigüedad, "baja" si hay dudas significativas
 
 FORMATO DE RESPUESTA (devuelve SOLO este JSON, sin texto adicional):
 
@@ -51,6 +63,9 @@ FORMATO DE RESPUESTA (devuelve SOLO este JSON, sin texto adicional):
   "nombre_proveedor": "Nombre exacto del proveedor/emisor de la factura",
   "nombre_cliente": "Nombre exacto del cliente que recibe la factura",
   "importe_total": 1234.56,
+  "base_imponible": 1020.30,
+  "impuestos_total": 214.26,
+  "iva_porcentaje": 21.0,
   "fecha_emision": "2025-07-15",
   "confianza": "alta"
 }
@@ -58,10 +73,14 @@ FORMATO DE RESPUESTA (devuelve SOLO este JSON, sin texto adicional):
 REGLAS:
 - nombre_proveedor: ⚠️ OBLIGATORIO - Empresa que emite la factura (header/logo). Si no encuentras, usa null
 - nombre_cliente: Empresa que recibe la factura (opcional, puede ser null)
-- importe_total: Número decimal (usa punto como separador decimal)
+- importe_total: Número decimal (usa punto como separador decimal) - OBLIGATORIO
+- base_imponible: Número decimal - Base sin IVA. Si no encuentras, intenta calcular desde importe_total e iva_porcentaje
+- impuestos_total: Número decimal - Total de IVA/impuestos. Si no encuentras, intenta calcular desde importe_total y base_imponible
+- iva_porcentaje: Número decimal - Porcentaje de IVA (ej: 21.0 para 21%). Si no encuentras, intenta calcular desde base_imponible e impuestos_total
 - fecha_emision: Fecha en formato YYYY-MM-DD (si no encuentras fecha, usa null)
 - confianza: Valores válidos: "alta", "media", "baja"
 - Si no encuentras algún dato, usa null
+- IMPORTANTE: Si solo tienes importe_total, intenta calcular base_imponible e impuestos_total asumiendo un IVA común (21%, 10%, 4%)
 """
 
 class InvoiceExtractor:
@@ -187,7 +206,15 @@ class InvoiceExtractor:
                 logger.warning(f"Finish reason: {finish_reason}")
                 if hasattr(response, 'usage'):
                     logger.warning(f"Tokens usados: {response.usage.total_tokens if response.usage else 'N/A'}")
-                return {'nombre_proveedor': None, 'nombre_cliente': None, 'importe_total': None, 'confianza': 'baja'}
+                return {
+                    'nombre_proveedor': None, 
+                    'nombre_cliente': None, 
+                    'importe_total': None,
+                    'base_imponible': None,
+                    'impuestos_total': None,
+                    'iva_porcentaje': None,
+                    'confianza': 'baja'
+                }
             
             # Verificar si la respuesta se cortó por límite de tokens
             if finish_reason == 'length':
@@ -223,11 +250,28 @@ class InvoiceExtractor:
                 logger.warning(f"Contenido completo recibido (sin truncar): {repr(content_stripped)}")
                 # Log también como string normal para debugging visual
                 logger.warning(f"Contenido como string: {content_stripped}")
-                return {'nombre_proveedor': None, 'nombre_cliente': None, 'importe_total': None, 'confianza': 'baja'}
+                return {
+                    'nombre_proveedor': None, 
+                    'nombre_cliente': None, 
+                    'importe_total': None,
+                    'base_imponible': None,
+                    'impuestos_total': None,
+                    'iva_porcentaje': None,
+                    'confianza': 'baja'
+                }
 
-            # Validación y conversión
+            # Validación y conversión de campos numéricos
             if data.get('importe_total') is not None:
                 data['importe_total'] = float(data['importe_total'])
+            
+            if data.get('base_imponible') is not None:
+                data['base_imponible'] = float(data['base_imponible'])
+            
+            if data.get('impuestos_total') is not None:
+                data['impuestos_total'] = float(data['impuestos_total'])
+            
+            if data.get('iva_porcentaje') is not None:
+                data['iva_porcentaje'] = float(data['iva_porcentaje'])
 
             logger.info(f"Extracción OpenAI exitosa - Confianza: {data.get('confianza', 'desconocida')}")
 
@@ -241,7 +285,15 @@ class InvoiceExtractor:
             raise  # Retry automático
         except json.JSONDecodeError as e:
             logger.warning(f"Error parseando JSON de OpenAI: {e}")
-            return {'nombre_cliente': None, 'importe_total': None, 'confianza': 'baja'}
+            return {
+                'nombre_proveedor': None,
+                'nombre_cliente': None, 
+                'importe_total': None,
+                'base_imponible': None,
+                'impuestos_total': None,
+                'iva_porcentaje': None,
+                'confianza': 'baja'
+            }
         except Exception as e:
             logger.error(f"Error inesperado en OpenAI: {e}")
             raise
@@ -367,8 +419,12 @@ class InvoiceExtractor:
     def _empty_result(self) -> dict:
         """Retornar resultado vacío cuando falla todo"""
         return {
+            'nombre_proveedor': None,
             'nombre_cliente': None,
             'importe_total': None,
+            'base_imponible': None,
+            'impuestos_total': None,
+            'iva_porcentaje': None,
             'confianza': 'baja'
         }
     

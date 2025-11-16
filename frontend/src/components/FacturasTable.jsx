@@ -5,7 +5,7 @@ import { sanitizeErrorMessage } from '../utils/api';
 /**
  * Componente para mostrar tabla de todas las facturas del mes y facturas no procesadas
  */
-export function FacturasTable({ facturas = [], failedInvoices = [], loading = false }) {
+export function FacturasTable({ facturas = [], failedInvoices = [], loading = false, showTabs = true, showOnlyPendientes = false }) {
   const [activeTab, setActiveTab] = useState('todas');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
@@ -90,19 +90,19 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
     return (
       <button
         onClick={() => handleSort(columnKey)}
-        className="flex items-center justify-center gap-1 hover:text-gray-900 transition-colors mx-auto"
+        className="flex items-center justify-center gap-2 hover:text-gray-900 transition-colors mx-auto"
       >
         {children}
         {isActive ? (
           sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-4 h-4" />
+            <ChevronUp className="w-5 h-5" />
           ) : (
-            <ChevronDown className="w-4 h-4" />
+            <ChevronDown className="w-5 h-5" />
           )
         ) : (
-          <div className="w-4 h-4 flex flex-col">
-            <ChevronUp className="w-2 h-2 text-gray-400" />
-            <ChevronDown className="w-2 h-2 text-gray-400 -mt-1" />
+          <div className="w-5 h-5 flex flex-col">
+            <ChevronUp className="w-2.5 h-2.5 text-gray-400" />
+            <ChevronDown className="w-2.5 h-2.5 text-gray-400 -mt-1" />
           </div>
         )}
       </button>
@@ -134,49 +134,86 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
   }, [failedInvoices]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-header p-4 sm:p-6 ipad:p-8">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-4">
-        <button
-          onClick={() => setActiveTab('todas')}
-          className={`px-4 py-2 text-sm sm:text-base font-medium transition-colors ${
-            activeTab === 'todas'
-              ? 'border-b-2 border-purple-500 text-purple-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Todas ({facturas.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('pendientes')}
-          className={`px-4 py-2 text-sm sm:text-base font-medium transition-colors ${
-            activeTab === 'pendientes'
-              ? 'border-b-2 border-purple-500 text-purple-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Pendientes ({facturasPendientes.length})
-        </button>
-      </div>
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-header p-5 sm:p-7 ipad:p-9">
+      {/* Tabs - Solo mostrar si showTabs es true y no es solo pendientes */}
+      {showTabs && !showOnlyPendientes && (
+        <div className="flex border-b border-gray-200 mb-4">
+          <button
+            onClick={() => setActiveTab('todas')}
+            className={`px-5 py-3 text-base sm:text-lg font-medium transition-colors ${
+              activeTab === 'todas'
+                ? 'border-b-2 border-purple-500 text-purple-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Todas ({facturas.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('pendientes')}
+            className={`px-5 py-3 text-base sm:text-lg font-medium transition-colors ${
+              activeTab === 'pendientes'
+                ? 'border-b-2 border-purple-500 text-purple-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Pendientes ({facturasPendientes.length})
+          </button>
+        </div>
+      )}
 
       {/* Tabla de facturas */}
-      {activeTab === 'todas' ? (
+      {showOnlyPendientes ? (
+        // Mostrar solo pendientes
         <>
-          {!facturas || facturas.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay facturas para mostrar</p>
+          {facturasPendientes.length === 0 ? (
+            <p className="text-gray-500 text-center py-8 text-lg">No hay facturas pendientes de revisión</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">PROVEEDOR</th>
-                    <th className="text-center py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">FACTURA</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">RAZÓN</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {facturasPendientes.map((invoice, index) => (
+                    <tr
+                      key={index}
+                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="py-5 px-5 md:px-7 ipad:px-9">
+                        <span className="text-lg font-medium text-gray-900 break-words">{invoice.nombre}</span>
+                      </td>
+                      <td className="py-5 px-5 md:px-7 ipad:px-9">
+                        <span className="text-lg text-gray-600 break-words">
+                          {invoice.razon || 'Sin razón especificada'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      ) : activeTab === 'todas' ? (
+        <>
+          {!facturas || facturas.length === 0 ? (
+            <p className="text-gray-500 text-center py-8 text-lg">No hay facturas para mostrar</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">PROVEEDOR</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">
                       <SortButton columnKey="fecha">FECHA</SortButton>
                     </th>
-                    <th className="text-right py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">
                       <SortButton columnKey="total">TOTAL</SortButton>
                     </th>
-                    <th className="text-center py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">ESTADO</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">ESTADO</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -185,20 +222,20 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
                       key={factura.id} 
                       className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                     >
-                      <td className="py-3 px-4 md:px-6 ipad:px-8">
-                        <div className="text-sm font-medium text-gray-900">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9">
+                        <div className="text-lg font-medium text-gray-900">
                           {factura.proveedor_nombre || 'N/A'}
                         </div>
                       </td>
-                      <td className="py-3 px-4 md:px-6 ipad:px-8 text-center text-sm text-gray-600 whitespace-nowrap">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center text-lg text-gray-600 whitespace-nowrap">
                         {formatDate(factura.fecha_emision)}
                       </td>
-                      <td className="py-3 px-4 md:px-6 ipad:px-8 text-right text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center text-lg font-semibold text-gray-900 whitespace-nowrap">
                         {formatCurrency(factura.importe_total || 0)}
                       </td>
-                      <td className="py-3 px-4 md:px-6 ipad:px-8 text-center">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
                         <span className="inline-flex items-center justify-center">
-                          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                          <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                         </span>
                       </td>
                     </tr>
@@ -211,14 +248,14 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
       ) : (
         <>
           {facturasPendientes.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay facturas pendientes de revisión</p>
+            <p className="text-gray-500 text-center py-8 text-lg">No hay facturas pendientes de revisión</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">FACTURA</th>
-                    <th className="text-left py-3 px-4 md:px-6 ipad:px-8 text-sm font-semibold text-gray-700">RAZÓN</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">FACTURA</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">RAZÓN</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -227,11 +264,11 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
                       key={index}
                       className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                     >
-                      <td className="py-3 px-4 md:px-6 ipad:px-8">
-                        <span className="text-sm font-medium text-gray-900 break-words">{invoice.nombre}</span>
+                      <td className="py-5 px-5 md:px-7 ipad:px-9">
+                        <span className="text-lg font-medium text-gray-900 break-words">{invoice.nombre}</span>
                       </td>
-                      <td className="py-3 px-4 md:px-6 ipad:px-8">
-                        <span className="text-sm text-gray-600 break-words">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9">
+                        <span className="text-lg text-gray-600 break-words">
                           {invoice.razon || 'Sin razón especificada'}
                         </span>
                       </td>

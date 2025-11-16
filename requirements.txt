@@ -23,6 +23,7 @@ pydantic==2.5.0
 python-dotenv==1.0.1
 tenacity==8.2.3
 filelock==3.13.1
+dateparser==1.2.0
 
 # OpenAI
 openai==1.3.0

@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 def normalize_for_hash(value: any) -> str:
     """

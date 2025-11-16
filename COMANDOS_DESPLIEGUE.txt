@@ -1,0 +1,46 @@
+# ============================================
+# COMANDOS PARA DESPLEGAR EL NUEVO FRONTEND
+# ============================================
+
+# El contenedor está en la red 'traefik-public' y usa docker-compose
+
+# OPCIÓN 1: Si usas docker-compose (RECOMENDADO)
+cd /home/alex/proyectos/invoice-extractor
+docker-compose stop invoice-frontend
+docker-compose build invoice-frontend
+docker-compose up -d invoice-frontend
+
+# OPCIÓN 2: Si prefieres hacerlo manualmente
+# 1. Detener el contenedor actual
+docker stop invoice-frontend
+
+# 2. Eliminar el contenedor (mantiene la imagen)
+docker rm invoice-frontend
+
+# 3. Crear nuevo contenedor con la imagen actualizada
+#    (Usando la misma red y configuración)
+docker run -d \
+  --name invoice-frontend \
+  --restart unless-stopped \
+  --network traefik-public \
+  invoice-frontend:latest
+
+# 4. Verificar que está corriendo
+docker ps | grep invoice-frontend
+
+# 5. Ver logs para confirmar que funciona
+docker logs invoice-frontend | tail -10
+
+# ============================================
+# VERIFICACIÓN
+# ============================================
+# Accede a: http://82.25.101.32/invoice-dashboard/
+# 
+# Deberías ver:
+# ✅ Componente compacto oscuro (slate-900/800)
+# ✅ Mes actual en grande (ej: "Julio")
+# ✅ Año en azul (ej: "2025")
+# ✅ Al hacer click se abre dropdown con meses
+# ❌ NO debería aparecer la barra horizontal de meses
+# ❌ NO debería aparecer el selector de año separado
+

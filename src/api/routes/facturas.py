@@ -1,10 +1,16 @@
 """
 Endpoints para facturas
 """
-from fastapi import APIRouter, Depends, Query, HTTPException
-from typing import Optional
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from starlette.requests import Request
+from typing import Optional, Union
+from datetime import date
+from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_factura_repository
+from src.logging_conf import get_logger
+
+logger = get_logger(__name__, component="backend")
 from src.api.schemas.facturas import (
     FacturaSummaryResponse,
     FacturaByDayResponse,
@@ -131,83 +137,450 @@ async def get_categories(
 
 @router.get("/failed", response_model=FailedInvoicesResponse)
 async def get_failed_invoices(
-    month: int = Query(..., ge=1, le=12, description="Mes (1-12)"),
-    year: int = Query(..., ge=2000, le=2100, description="Año")
+    request: Request,
+    repo: FacturaRepository = Depends(get_factura_repository)
 ):
     """
-    Obtener lista de facturas fallidas del mes seleccionado desde la carpeta de cuarentena
+    Obtener lista de facturas fallidas.
+    Si se proporcionan month y year como query params, filtra por ese mes. Si no, devuelve TODAS las facturas fallidas.
+    Combina facturas en BD (estado 'error' o 'revisar') con archivos en cuarentena.
     """
     try:
         import json
         import os
+        import re
         from pathlib import Path
         from datetime import datetime, date
         from calendar import monthrange
         
-        # Ruta de cuarentena
-        quarantine_path = Path(os.getenv('QUARANTINE_PATH', 'data/quarantine'))
+        # Leer query params manualmente
+        query_params = request.query_params
+        month_str = query_params.get('month')
+        year_str = query_params.get('year')
         
-        if not quarantine_path.exists():
-            return FailedInvoicesResponse(data=[])
+        month = None
+        year = None
         
-        # Calcular rango de fechas del mes
-        start_date = date(year, month, 1)
-        _, last_day = monthrange(year, month)
-        end_date = date(year, month, last_day)
+        if month_str:
+            try:
+                month = int(month_str)
+                if month < 1 or month > 12:
+                    raise HTTPException(status_code=422, detail="month debe estar entre 1 y 12")
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail="month debe ser un número entero entre 1 y 12")
+        
+        if year_str:
+            try:
+                year = int(year_str)
+                if year < 2000 or year > 2100:
+                    raise HTTPException(status_code=422, detail="year debe estar entre 2000 y 2100")
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail="year debe ser un número entero entre 2000 y 2100")
+        
+        # Si se proporcionan month y year, calcular rango de fechas
+        # Si no, usar None para indicar que no hay filtro
+        start_date = None
+        end_date = None
+        if month is not None and year is not None:
+            start_date = date(year, month, 1)
+            _, last_day = monthrange(year, month)
+            end_date = date(year, month, last_day)
         
         failed_invoices = []
+        processed_names_bd = set()  # Solo para evitar duplicados en BD
+        processed_names_quarantine = set()  # Para evitar duplicados entre archivos de cuarentena
         
-        # Buscar todos los archivos .meta.json en cuarentena
-        for meta_file in quarantine_path.glob("*.meta.json"):
-            try:
-                with open(meta_file, 'r', encoding='utf-8') as f:
-                    meta_data = json.load(f)
-                
-                # Extraer información del archivo
-                file_info = meta_data.get('file_info', {})
-                nombre = file_info.get('name', meta_file.stem.replace('.meta', ''))
-                
-                # Intentar obtener fecha de modificación del archivo en Drive (preferida)
-                # Si no está disponible, usar fecha de cuarentena como fallback
-                file_date = None
-                modified_time = file_info.get('modifiedTime')
-                if modified_time:
-                    try:
-                        # Parsear fecha de modificación de Drive (formato ISO)
-                        file_date = datetime.fromisoformat(modified_time.replace('Z', '+00:00')).date()
-                    except (ValueError, AttributeError):
-                        pass
-                
-                # Si no hay fecha de modificación, usar fecha de cuarentena como fallback
-                if file_date is None:
-                    quarantined_at_str = meta_data.get('quarantined_at')
-                    if quarantined_at_str:
-                        try:
-                            file_date = datetime.fromisoformat(quarantined_at_str.replace('Z', '+00:00')).date()
-                        except (ValueError, AttributeError):
-                            continue
-                    else:
-                        continue
-                
-                # Filtrar por mes usando fecha del archivo (modificación o cuarentena)
-                if start_date <= file_date <= end_date:
+        logger.info(f"🔍 Iniciando búsqueda de facturas fallidas. Filtro: month={month}, year={year}")
+        
+        # 1. CONSULTAR FACTURAS EN BD CON ESTADO "error" o "revisar"
+        logger.info("📊 Paso 1: Consultando facturas en BD con estado 'error' o 'revisar'")
+        with repo.db.get_session() as session:
+            from src.db.models import Factura
+            
+            # Query base: facturas con estado error o revisar
+            query = session.query(Factura).filter(
+                Factura.estado.in_(['error', 'revisar'])
+            )
+            
+            # Si hay filtro de fecha, aplicarlo
+            if start_date is not None and end_date is not None:
+                from sqlalchemy import func
+                fecha_filtro = func.coalesce(Factura.fecha_emision, Factura.fecha_recepcion)
+                query = query.filter(
+                    fecha_filtro >= start_date,
+                    fecha_filtro <= end_date
+                )
+                logger.info(f"📅 Aplicando filtro de fecha: {start_date} a {end_date}")
+            
+            facturas_bd = query.all()
+            logger.info(f"✅ Encontradas {len(facturas_bd)} facturas en BD con estado 'error' o 'revisar'")
+            
+            for factura_obj in facturas_bd:
+                nombre = factura_obj.drive_file_name
+                if nombre and nombre not in processed_names_bd:
+                    # Extraer razón del error_msg si existe
+                    razon = factura_obj.error_msg if hasattr(factura_obj, 'error_msg') and factura_obj.error_msg else None
+                    if not razon:
+                        # Si no hay error_msg, usar el estado como razón
+                        razon = f"Estado: {factura_obj.estado}"
+                    
                     failed_invoices.append({
                         'nombre': nombre,
-                        'timestamp': modified_time or meta_data.get('quarantined_at', '')
+                        'fecha_emision': factura_obj.fecha_emision.isoformat() if factura_obj.fecha_emision else None,
+                        'estado': factura_obj.estado,
+                        'source': 'bd',
+                        'razon': razon
                     })
+                    processed_names_bd.add(nombre)
+                    logger.debug(f"  ➕ Agregada factura de BD: {nombre} (estado: {factura_obj.estado})")
+        
+        logger.info(f"📊 Total facturas de BD agregadas: {len(failed_invoices)}")
+        
+        # 2. CONSULTAR ARCHIVOS EN CUARENTENA
+        logger.info("📁 Paso 2: Consultando archivos en cuarentena")
+        # Usar ruta relativa al directorio de trabajo del contenedor (/app)
+        quarantine_path_env = os.getenv('QUARANTINE_PATH', 'data/quarantine')
+        
+        # Siempre usar ruta relativa desde /app (directorio de trabajo del contenedor)
+        # Ignorar si viene como ruta absoluta del host
+        if os.path.isabs(quarantine_path_env):
+            # Si viene como ruta absoluta, extraer solo el nombre relativo
+            # Ej: /home/alex/proyectos/invoice-extractor/data/quarantine -> data/quarantine
+            parts = Path(quarantine_path_env).parts
+            if 'data' in parts and 'quarantine' in parts:
+                # Encontrar índice de 'data' y tomar desde ahí
+                data_idx = parts.index('data')
+                quarantine_path_env = str(Path(*parts[data_idx:]))
+                logger.info(f"📂 Ruta absoluta detectada, convirtiendo a relativa: {quarantine_path_env}")
+        
+        # Resolver desde /app (directorio de trabajo del contenedor)
+        quarantine_path = Path('/app') / quarantine_path_env
+        logger.info(f"📂 Ruta de cuarentena (env): {os.getenv('QUARANTINE_PATH', 'data/quarantine')}")
+        logger.info(f"📂 Ruta de cuarentena (usada): {quarantine_path_env}")
+        logger.info(f"📂 Ruta de cuarentena (resuelta): {quarantine_path}")
+        logger.info(f"📂 Existe: {quarantine_path.exists()}")
+        
+        # Obtener lista de facturas ya procesadas en BD para filtrar cuarentena
+        processed_in_bd = set()
+        with repo.db.get_session() as session:
+            from src.db.models import Factura
+            # Obtener todas las facturas procesadas (estado diferente de 'error' y 'revisar')
+            facturas_procesadas = session.query(Factura.drive_file_name).filter(
+                Factura.drive_file_name.isnot(None),
+                ~Factura.estado.in_(['error', 'revisar'])
+            ).all()
+            processed_in_bd = {f[0] for f in facturas_procesadas if f[0]}
+            logger.info(f"📊 Facturas ya procesadas en BD (excluidas de cuarentena): {len(processed_in_bd)}")
+        
+        quarantine_stats = {
+            'total_files_found': 0,
+            'processed': 0,
+            'skipped_bd_duplicate': 0,
+            'skipped_quarantine_duplicate': 0,
+            'skipped_unknown': 0,
+            'errors': 0,
+            'error_details': []
+        }
+        
+        if quarantine_path.exists():
+            # Buscar en todas las subcarpetas de cuarentena
+            meta_files = list(quarantine_path.rglob("*.meta.json"))
+            quarantine_stats['total_files_found'] = len(meta_files)
+            logger.info(f"🔍 Encontrados {len(meta_files)} archivos .meta.json en cuarentena")
             
-            except (json.JSONDecodeError, ValueError, KeyError) as e:
-                # Si hay error leyendo un archivo, continuar con el siguiente
-                continue
+            for meta_file in meta_files:
+                try:
+                    with open(meta_file, 'r', encoding='utf-8') as f:
+                        meta_data = json.load(f)
+                    
+                    # Extraer información del archivo - múltiples fuentes posibles
+                    file_info = meta_data.get('file_info', {})
+                    nombre = (
+                        meta_data.get('drive_file_name') or 
+                        file_info.get('name') or 
+                        meta_file.stem.replace('.meta', '').split('_', 2)[-1] if '_' in meta_file.stem else meta_file.stem.replace('.meta', '')
+                    )
+                    
+                    # Omitir si está en BD o si ya fue procesado de cuarentena (evitar duplicados)
+                    if nombre == 'unknown':
+                        quarantine_stats['skipped_unknown'] += 1
+                        logger.debug(f"  ⏭️  Omitido (nombre unknown): {meta_file.name}")
+                        continue
+                    
+                    if nombre in processed_names_bd:
+                        quarantine_stats['skipped_bd_duplicate'] += 1
+                        logger.debug(f"  ⏭️  Omitido (ya en BD con error/revisar): {nombre}")
+                        continue
+                    
+                    # Excluir facturas que ya fueron procesadas correctamente en BD
+                    if nombre in processed_in_bd:
+                        quarantine_stats['skipped_bd_duplicate'] += 1
+                        logger.debug(f"  ⏭️  Omitido (ya procesada en BD): {nombre}")
+                        continue
+                    
+                    # Evitar duplicados entre archivos de cuarentena (solo incluir cada factura única una vez)
+                    if nombre in processed_names_quarantine:
+                        quarantine_stats['skipped_quarantine_duplicate'] += 1
+                        logger.debug(f"  ⏭️  Omitido (duplicado en cuarentena): {nombre}")
+                        continue
+                    
+                    # Intentar obtener fecha_emision del metadata (si fue extraída antes de fallar)
+                    file_date = None
+                    fecha_emision_str = meta_data.get('fecha_emision') or meta_data.get('factura_data', {}).get('fecha_emision')
+                    
+                    if fecha_emision_str:
+                        try:
+                            if isinstance(fecha_emision_str, str):
+                                file_date = datetime.fromisoformat(fecha_emision_str.replace('Z', '+00:00')).date()
+                            else:
+                                # Si es un objeto date/datetime
+                                if hasattr(fecha_emision_str, 'date'):
+                                    file_date = fecha_emision_str.date()
+                                elif hasattr(fecha_emision_str, 'isoformat'):
+                                    file_date = datetime.fromisoformat(fecha_emision_str.isoformat()).date()
+                        except (ValueError, AttributeError, TypeError):
+                            pass
+                    
+                    # Si no hay fecha_emision en metadata, intentar parsear del nombre del archivo
+                    # Esto es crítico porque muchos archivos en cuarentena no tienen fecha_emision
+                    if file_date is None:
+                        default_year = year if year is not None else datetime.utcnow().year
+                        file_date = _parse_date_from_filename(nombre, default_year)
+                    
+                    # Si aún no tenemos fecha, usar fecha de modificación de Drive como siguiente opción
+                    if file_date is None:
+                        modified_time = file_info.get('modifiedTime') or meta_data.get('file_info', {}).get('modifiedTime')
+                        if modified_time:
+                            try:
+                                if isinstance(modified_time, str):
+                                    file_date = datetime.fromisoformat(modified_time.replace('Z', '+00:00')).date()
+                            except (ValueError, AttributeError):
+                                pass
+                    
+                    # Si aún no tenemos fecha, usar fecha de cuarentena como último recurso
+                    if file_date is None:
+                        quarantined_at_str = meta_data.get('quarantined_at')
+                        if quarantined_at_str:
+                            try:
+                                file_date = datetime.fromisoformat(quarantined_at_str.replace('Z', '+00:00')).date()
+                            except (ValueError, AttributeError):
+                                pass
+                    
+                    # Si hay filtro de fecha, verificar que la fecha esté en el rango
+                    # Si no hay filtro, incluir todas las facturas
+                    should_include = False
+                    
+                    if start_date is not None and end_date is not None:
+                        # Hay filtro de mes: solo incluir si la fecha está en el rango
+                        if file_date is not None:
+                            if start_date <= file_date <= end_date:
+                                should_include = True
+                        # Si NO tenemos fecha pero el nombre sugiere el mes correcto, incluirlo de todas formas
+                        elif nombre and nombre != 'unknown':
+                            # Verificar si el nombre contiene el mes en texto
+                            nombre_lower = nombre.lower()
+                            meses_nombres = {
+                                1: ['enero', 'jan'], 2: ['febrero', 'feb'], 3: ['marzo', 'mar'],
+                                4: ['abril', 'apr'], 5: ['mayo', 'may'], 6: ['junio', 'jun'],
+                                7: ['julio', 'jul'], 8: ['agosto', 'agost', 'aug'], 9: ['septiembre', 'sep', 'sept'],
+                                10: ['octubre', 'oct'], 11: ['noviembre', 'nov'], 12: ['diciembre', 'dec']
+                            }
+                            
+                            # Verificar si el nombre contiene el mes actual
+                            mes_encontrado = False
+                            for mes_nombre in meses_nombres.get(month, []):
+                                if mes_nombre in nombre_lower:
+                                    # Verificar si también tiene el año
+                                    if str(year) in nombre or str(year)[-2:] in nombre:
+                                        mes_encontrado = True
+                                        break
+                            
+                            if mes_encontrado:
+                                should_include = True
+                    else:
+                        # No hay filtro: incluir todas las facturas en cuarentena
+                        should_include = True
+                    
+                    if should_include:
+                        # Incluir TODAS las entradas de cuarentena (sin deduplicar)
+                        # Agregar información adicional para diferenciar duplicados
+                        # Extraer razón: priorizar 'reason', luego 'error', luego 'decision'
+                        razon = (
+                            meta_data.get('reason') or 
+                            meta_data.get('error') or 
+                            (f"Decisión: {meta_data.get('decision')}" if meta_data.get('decision') else None)
+                        )
+                        # Limpiar mensajes de error muy largos (ej: stack traces de BD)
+                        if razon and len(razon) > 200:
+                            razon = razon[:200] + "..."
+                        
+                        quarantine_entry = {
+                            'nombre': nombre,
+                            'fecha_emision': file_date.isoformat() if file_date else None,
+                            'estado': 'quarantine',
+                            'source': 'quarantine',
+                            'meta_file': str(meta_file.relative_to(quarantine_path)) if quarantine_path in meta_file.parents else meta_file.name,
+                            'quarantined_at': meta_data.get('quarantined_at'),
+                            'decision': meta_data.get('decision'),
+                            'razon': razon
+                        }
+                        failed_invoices.append(quarantine_entry)
+                        processed_names_quarantine.add(nombre)  # Marcar como procesado para evitar duplicados
+                        quarantine_stats['processed'] += 1
+                        logger.debug(f"  ➕ Agregada factura de cuarentena: {nombre} (archivo: {meta_file.name})")
+                
+                except json.JSONDecodeError as e:
+                    quarantine_stats['errors'] += 1
+                    error_msg = f"Error JSON en {meta_file.name}: {str(e)}"
+                    quarantine_stats['error_details'].append(error_msg)
+                    logger.warning(f"  ⚠️  {error_msg}")
+                    continue
+                except ValueError as e:
+                    quarantine_stats['errors'] += 1
+                    error_msg = f"Error de valor en {meta_file.name}: {str(e)}"
+                    quarantine_stats['error_details'].append(error_msg)
+                    logger.warning(f"  ⚠️  {error_msg}")
+                    continue
+                except KeyError as e:
+                    quarantine_stats['errors'] += 1
+                    error_msg = f"Error de clave faltante en {meta_file.name}: {str(e)}"
+                    quarantine_stats['error_details'].append(error_msg)
+                    logger.warning(f"  ⚠️  {error_msg}")
+                    continue
+                except Exception as e:
+                    quarantine_stats['errors'] += 1
+                    error_msg = f"Error inesperado procesando {meta_file.name}: {type(e).__name__}: {str(e)}"
+                    quarantine_stats['error_details'].append(error_msg)
+                    logger.error(f"  ❌ {error_msg}", exc_info=True)
+                    continue
+        else:
+            logger.warning(f"⚠️  La ruta de cuarentena no existe: {quarantine_path}")
         
-        # Ordenar por fecha (más recientes primero) y limitar a 10
-        failed_invoices.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        failed_invoices = failed_invoices[:10]
+        logger.info(f"📊 Estadísticas de cuarentena:")
+        logger.info(f"  - Archivos encontrados: {quarantine_stats['total_files_found']}")
+        logger.info(f"  - Procesados (únicos): {quarantine_stats['processed']}")
+        logger.info(f"  - Omitidos (duplicados de BD): {quarantine_stats['skipped_bd_duplicate']}")
+        logger.info(f"  - Omitidos (duplicados en cuarentena): {quarantine_stats['skipped_quarantine_duplicate']}")
+        logger.info(f"  - Omitidos (nombre unknown): {quarantine_stats['skipped_unknown']}")
+        logger.info(f"  - Errores: {quarantine_stats['errors']}")
+        if quarantine_stats['error_details']:
+            logger.warning(f"  - Detalles de errores: {quarantine_stats['error_details'][:5]}")  # Primeros 5 errores
         
-        # Remover timestamp del resultado final
-        items = [FailedInvoiceItem(nombre=item['nombre']) for item in failed_invoices]
+        # Ordenar por fecha_emision (más recientes primero)
+        # Si no hay fecha, ponerlas al final
+        failed_invoices.sort(
+            key=lambda x: x.get('fecha_emision', '') or '0000-00-00',
+            reverse=True
+        )
+        
+        logger.info(f"📊 Total facturas fallidas encontradas: {len(failed_invoices)}")
+        logger.info(f"  - De BD: {sum(1 for item in failed_invoices if item.get('source') == 'bd')}")
+        logger.info(f"  - De cuarentena: {sum(1 for item in failed_invoices if item.get('source') == 'quarantine')}")
+        
+        # Limitar a 500 resultados para evitar sobrecarga (aumentado de 200 para incluir todas las entradas)
+        if len(failed_invoices) > 500:
+            logger.warning(f"⚠️  Limitando resultados a 500 (había {len(failed_invoices)})")
+            failed_invoices = failed_invoices[:500]
+        
+        # Construir items con nombre y razón
+        items = [FailedInvoiceItem(
+            nombre=item['nombre'],
+            razon=item.get('razon')
+        ) for item in failed_invoices]
+        
+        logger.info(f"✅ Devolviendo {len(items)} facturas fallidas")
         return FailedInvoicesResponse(data=items)
     
+    except HTTPException:
+        raise  # Re-raise HTTPException sin modificar
     except Exception as e:
+        logger.error(f"❌ Error inesperado en get_failed_invoices: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error al obtener facturas fallidas: {str(e)}")
+
+
+def _parse_date_from_filename(filename: str, default_year: int = None) -> Optional[date]:
+    """
+    Intentar parsear fecha desde el nombre del archivo.
+    Ejemplos: "Factura REVO 1 Enero 2024" -> 2024-01-01
+              "Fact EVOLBE jul 25" -> 2025-07-25 (si default_year=2025)
+              "Factura REVO 2 Enero 2024.pdf" -> 2024-01-01
+    """
+    try:
+        from datetime import datetime
+        import dateparser
+        
+        # Mapeo de meses en español (incluyendo variantes)
+        meses_es = {
+            'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+            'julio': 7, 'agosto': 8, 'agost': 8,  # Variante común
+            'septiembre': 9, 'sep': 9, 'sept': 9,
+            'octubre': 10, 'oct': 10,
+            'noviembre': 11, 'nov': 11,
+            'diciembre': 12, 'dec': 12,
+            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+            'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        }
+        
+        # Normalizar nombre: remover extensión y convertir a minúsculas para búsqueda
+        filename_clean = filename.rsplit('.', 1)[0].lower()
+        
+        # Patrones mejorados para nombres de archivos
+        patterns = [
+            # "Enero 2024", "enero 2024" - patrón más flexible
+            r'(enero|febrero|marzo|abril|mayo|junio|julio|agosto|agost|septiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dec)\s+(\d{4})',
+            # "jul 25", "julio 25", "agost 25" - con año de 2 dígitos
+            r'(enero|febrero|marzo|abril|mayo|junio|julio|agosto|agost|septiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dec)\s+(\d{2})',
+            # "2024-01", "2024/01"
+            r'(\d{4})[-/](\d{1,2})',
+            # Patrón específico: "Factura X Enero 2024" o "Fact X jul 25"
+            r'(?:factura|fact)\s+\w+\s+\d*\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|agost|septiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dec)\s+(\d{2,4})',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, filename_clean, re.IGNORECASE)
+            if match:
+                grupos = match.groups()
+                
+                # Patrón: mes + año (4 dígitos)
+                if len(grupos) == 2:
+                    grupo1 = grupos[0].lower()
+                    grupo2 = grupos[1]
+                    
+                    # Si grupo1 es un mes y grupo2 es un año (4 dígitos)
+                    if grupo1 in meses_es and len(grupo2) == 4:
+                        year = int(grupo2)
+                        month = meses_es[grupo1]
+                        return date(year, month, 1)
+                    
+                    # Si grupo1 es un mes y grupo2 es un año (2 dígitos)
+                    if grupo1 in meses_es and len(grupo2) == 2:
+                        year = 2000 + int(grupo2)  # Asumir 20XX
+                        month = meses_es[grupo1]
+                        return date(year, month, 1)
+                    
+                    # Si grupo1 es año y grupo2 es mes
+                    if len(grupo1) == 4 and grupo2.isdigit():
+                        year = int(grupo1)
+                        month = int(grupo2)
+                        if 1 <= month <= 12:
+                            return date(year, month, 1)
+        
+        # Intentar con dateparser como último recurso
+        if dateparser:
+            try:
+                # Usar default_year si está disponible
+                settings = {}
+                if default_year:
+                    settings['PREFER_DATES_FROM'] = 'future'
+                    settings['RELATIVE_BASE'] = datetime(default_year, 1, 1)
+                
+                parsed = dateparser.parse(filename, languages=['es', 'en'], settings=settings)
+                if parsed:
+                    return parsed.date()
+            except:
+                pass
+        
+        return None
+    except Exception:
+        return None
 

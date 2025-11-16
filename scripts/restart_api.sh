@@ -58,7 +58,7 @@ fi
 echo "🚀 Iniciando API en puerto $PORT..."
 
 # Usar python3 -m uvicorn en lugar de uvicorn directamente
-nohup python3 -m uvicorn src.api.main:app --host 0.0.0.0 --port $PORT > /tmp/invoice-api.log 2>&1 &
+nohup python3 -m uvicorn src.api.main:app --log-config /dev/null --access-log --no-use-colors --host 0.0.0.0 --port $PORT > /tmp/invoice-api.log 2>&1 &
 
 NEW_PID=$!
 sleep 5  # Dar más tiempo para que inicie

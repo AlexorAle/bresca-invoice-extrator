@@ -12,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 class DriveClient:
     """Cliente para interactuar con Google Drive API"""

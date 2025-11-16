@@ -11,7 +11,7 @@ import io
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 def validate_pdf(pdf_path: str) -> bool:
     """

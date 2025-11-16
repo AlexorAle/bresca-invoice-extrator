@@ -9,7 +9,7 @@ from typing import Generator
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="backend")
 
 
 class JobLock:

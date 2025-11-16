@@ -1,62 +1,132 @@
-import React from 'react';
-import { MONTH_NAMES, MONTH_NAMES_SHORT } from '../utils/constants';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, ChevronDown } from 'lucide-react';
+import { MONTH_NAMES } from '../utils/constants';
 
 export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChange }) {
-  // Generar años desde 2020 hasta año actual + 1
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: currentYear - 2020 + 2 }, (_, i) => 2020 + i);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isOpen]);
+
+  // Convertir selectedMonth (1-12) a índice (0-11) para el componente
+  const currentMonthIndex = selectedMonth - 1;
+
+  const handleMonthSelect = (monthIndex) => {
+    // monthIndex es 0-11, convertir a 1-12 para el estado
+    onMonthChange(monthIndex + 1);
+    setIsOpen(false);
+  };
+
+  const handleYearChange = (increment) => {
+    onYearChange(selectedYear + increment);
+  };
 
   return (
-    <div className="bg-white border-b border-gray-200 rounded-[20px] shadow-header p-3 sm:p-4 md:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8 flex flex-col">
-      {/* Título en la parte superior */}
-      <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl md:text-2xl font-bold text-gray-900 mb-1 sm:mb-2 break-words">
-          🧾 Dashboard de Facturación
-        </h1>
-        <p className="text-sm text-gray-500">
-          Vista mensual - Actualizado en tiempo real
-        </p>
-      </div>
-
-      {/* Filtro del año centrado a la izquierda en el medio */}
-      <div className="mb-4 sm:mb-6 flex justify-start items-center">
-        <div className="year-selector">
-          <select
-            value={selectedYear}
-            onChange={(e) => onYearChange(parseInt(e.target.value))}
-            className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-white border border-gray-200 text-sm sm:text-base font-medium text-gray-700 hover:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-300 shadow-sm hover:shadow-md"
-            aria-label="Seleccionar año"
-          >
-            {years.map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
+    <div className="bg-white border-b border-gray-200 rounded-[20px] shadow-header p-1.5 sm:p-2 md:p-3 lg:p-4 mb-2 sm:mb-3 lg:mb-4">
+      {/* Header con título a la izquierda y selector a la derecha */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+        {/* Título a la izquierda */}
+        <div className="flex-1">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 break-words">
+            🧾 Dashboard de Facturación
+          </h1>
         </div>
-      </div>
 
-      {/* Los doce meses del año en la parte inferior */}
-      <div className="month-selector bg-gray-50 p-1.5 sm:p-2 rounded-xl mt-auto">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto ipad:overflow-x-auto lg:overflow-x-visible scrollbar-hide pb-1">
-          {MONTH_NAMES_SHORT.map((month, index) => {
-            const monthNumber = index + 1;
-            const isActive = selectedMonth === monthNumber;
+        {/* Componente compacto de selección de mes/año - A la derecha (50% más pequeño) */}
+        <div className="relative" ref={dropdownRef}>
+          {/* Calendario Principal - Compacto y más pequeño (50% del tamaño original) */}
+          <div 
+            className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg shadow-lg overflow-hidden cursor-pointer w-40 border border-slate-700 transition-all hover:shadow-blue-500/10 hover:shadow-xl"
+            onClick={() => setIsOpen(!isOpen)}
+          >
+            {/* Header con iconos */}
+            <div className="px-3 py-2 flex items-center justify-between border-b border-slate-700">
+              <Calendar className="text-blue-400" size={16} />
+              <ChevronDown 
+                className={`text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
+                size={14} 
+              />
+            </div>
+            
+            {/* Display de fecha */}
+            <div className="px-3 py-3 text-center">
+              <div className="text-lg font-light text-white mb-0.5 tracking-tight">
+                {MONTH_NAMES[currentMonthIndex]}
+              </div>
+              <div className="text-base font-bold text-blue-400">
+                {selectedYear}
+              </div>
+            </div>
+            
+            {/* Línea decorativa inferior */}
+            <div className="h-0.5 bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500"></div>
+          </div>
 
-            return (
+          {/* Dropdown Selector */}
+          {isOpen && (
+          <div className="absolute top-full mt-2 right-0 bg-slate-900 rounded-lg shadow-2xl overflow-hidden z-50 border border-slate-700 w-48 animate-[fadeIn_0.3s_ease-out]">
+            {/* Selector de año */}
+            <div className="bg-slate-800 px-4 py-3 flex items-center justify-between border-b border-slate-700">
               <button
-                key={monthNumber}
-                onClick={() => onMonthChange(monthNumber)}
-                aria-label={`Seleccionar ${MONTH_NAMES[index]}`}
-                aria-pressed={isActive}
-                className={`px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm md:text-base font-medium transition-all duration-300 min-w-[44px] sm:min-w-[50px] flex-shrink-0 ${
-                  isActive
-                    ? 'bg-gradient-active text-white shadow-button-active'
-                    : 'text-gray-600 hover:bg-white hover:text-purple-600'
-                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleYearChange(-1);
+                }}
+                className="p-1.5 hover:bg-slate-700 rounded transition-all text-white hover:scale-110"
+                aria-label="Año anterior"
               >
-                {month}
+                <ChevronLeft size={16} />
               </button>
-            );
-          })}
+              <span className="text-sm font-semibold text-white">{selectedYear}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleYearChange(1);
+                }}
+                className="p-1.5 hover:bg-slate-700 rounded transition-all text-white hover:scale-110"
+                aria-label="Año siguiente"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            {/* Grid de meses */}
+            <div className="grid grid-cols-3 gap-2 p-3">
+              {MONTH_NAMES.map((month, index) => (
+                <button
+                  key={month}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMonthSelect(index);
+                  }}
+                  className={`py-2 px-1.5 rounded text-xs font-medium transition-all duration-200 ${
+                    index === currentMonthIndex
+                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50 scale-105'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 hover:scale-105'
+                  }`}
+                  aria-label={`Seleccionar ${month}`}
+                  aria-pressed={index === currentMonthIndex}
+                >
+                  {month.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>

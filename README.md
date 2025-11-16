@@ -81,6 +81,16 @@ Variables de validación:
 - `MAX_PDF_SIZE_MB`: Tamaño máximo de PDF permitido en MB (default: 50). Archivos mayores se rechazan antes de descargar.
 - `JOB_LOCK_TIMEOUT_SEC`: Timeout para adquirir lock de ejecución en segundos (default: 300)
 
+Variables de limpieza automática:
+- `CLEANUP_PENDING_HOURS`: Horas antes de marcar facturas en 'pendiente' como 'error' (default: 24)
+
+Variables de espacio en disco:
+- `DISK_SPACE_WARNING_PERCENT`: Porcentaje mínimo para advertencia (default: 10)
+- `DISK_SPACE_CRITICAL_PERCENT`: Porcentaje crítico para error y detener procesamiento (default: 5)
+
+Variables de reprocesamiento de cuarentena:
+- `REPROCESS_INCLUDE_QUARANTINE`: Incluir archivos en cuarentena modificados en Drive (default: true)
+
 ### 4. Configurar Google Drive Service Account
 
 1. Crear proyecto en Google Cloud Console
