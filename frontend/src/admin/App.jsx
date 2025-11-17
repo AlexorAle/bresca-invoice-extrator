@@ -11,6 +11,7 @@ import { FacturaList } from './resources/facturas/FacturaList';
 import { FacturaShow } from './resources/facturas/FacturaShow';
 import { ReporteDashboard } from './resources/reportes/ReporteDashboard';
 import { ReportePendientes } from './resources/reportes/ReportePendientes';
+import { Reportes } from './resources/reportes/Reportes';
 import { CargaDatosPanel } from './resources/carga-datos/CargaDatosPanel';
 import { FileText, LayoutDashboard, AlertCircle, Upload } from 'lucide-react';
 
@@ -37,22 +38,26 @@ export const AdminApp = () => {
       dashboard={ReporteDashboard}
       // NO usar basename - Traefik ya hace strip prefix
     >
-      <Resource
-        name=""
-        list={ReporteDashboard}
-        options={{ label: 'Dashboard' }}
-      />
+      {/* Pendientes - Resource con list personalizado */}
       <Resource
         name="pendientes"
         list={ReportePendientes}
         options={{ label: 'Pendientes' }}
       />
+      {/* Reportes - Resource con list personalizado */}
+      <Resource
+        name="reportes"
+        list={Reportes}
+        options={{ label: 'Reportes' }}
+      />
+      {/* Facturas - Resource estándar de React-admin */}
       <Resource
         name="facturas"
         list={FacturaList}
         show={FacturaShow}
         options={{ label: 'Facturas' }}
       />
+      {/* Carga de Datos - Resource con list personalizado */}
       <Resource
         name="carga-datos"
         list={CargaDatosPanel}

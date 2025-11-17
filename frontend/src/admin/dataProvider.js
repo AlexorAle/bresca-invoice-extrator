@@ -116,6 +116,17 @@ export const dataProvider = {
         };
       }
 
+      // Para recursos personalizados (pendientes, reportes, carga-datos)
+      // que no usan el dataProvider, devolver estructura vacía
+      if (resource === 'pendientes' || resource === 'reportes' || resource === 'carga-datos') {
+        return {
+          data: [],
+          total: 0,
+          page: 1,
+          perPage: 25,
+        };
+      }
+
       // Para otros recursos, devolver estructura básica
       return {
         data: [],

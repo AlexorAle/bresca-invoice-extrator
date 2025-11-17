@@ -173,3 +173,11 @@ export async function fetchAllFacturas(month, year) {
   return response.data || [];
 }
 
+/**
+ * Obtener estadísticas de carga de datos
+ */
+export async function fetchDataLoadStats() {
+  const response = await fetchAPI('/system/data-load-stats');
+  return response;
+}
+

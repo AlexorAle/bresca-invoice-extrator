@@ -3,7 +3,7 @@
  * Integra el Sidebar custom del Dashboard original
  */
 import React, { useState, useEffect } from 'react';
-import { Layout as RALayout } from 'react-admin';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 
 /**
@@ -12,18 +12,25 @@ import { Sidebar } from '../components/Sidebar';
 export const Layout = (props) => {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Determinar sección activa desde la ruta de React-admin
   useEffect(() => {
     const updateActiveSection = () => {
-      const path = window.location.pathname;
-      if (path.includes('/facturas')) {
+      const path = location.pathname;
+      // Limpiar el path para obtener solo la parte del resource
+      const cleanPath = path.replace(/\/invoice-dashboard\/?/, '').replace(/^\//, '');
+      
+      if (cleanPath === 'facturas' || path.includes('/facturas')) {
         setActiveSection('facturas');
-      } else if (path.includes('/pendientes')) {
+      } else if (cleanPath === 'pendientes' || path.includes('/pendientes')) {
         setActiveSection('pendientes');
-      } else if (path.includes('/carga-datos')) {
+      } else if (cleanPath === 'reportes' || path.includes('/reportes')) {
+        setActiveSection('reportes');
+      } else if (cleanPath === 'carga-datos' || path.includes('/carga-datos')) {
         setActiveSection('carga-datos');
-      } else if (path === '/' || path === '') {
+      } else if (cleanPath === 'dashboard' || cleanPath === '' || path.endsWith('/invoice-dashboard/') || path === '/') {
         setActiveSection('dashboard');
       } else {
         setActiveSection('dashboard');
@@ -31,28 +38,17 @@ export const Layout = (props) => {
     };
 
     updateActiveSection();
-    // Escuchar cambios en la ruta
-    window.addEventListener('popstate', updateActiveSection);
-    return () => window.removeEventListener('popstate', updateActiveSection);
-  }, []);
+  }, [location.pathname]);
 
-  // Función para navegar usando el router de React-admin
+  // Función para navegar usando el sistema de routing de React-admin
   const handleSectionChange = (section) => {
     setActiveSection(section);
-    // Navegar usando el router de React-admin (pushState para SPA)
-    const basePath = window.location.pathname.split('/').slice(0, -1).join('/') || '';
+    // Usar navigate de react-router (que React-admin usa internamente)
     if (section === 'dashboard') {
-      window.history.pushState({}, '', '/');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } else if (section === 'pendientes') {
-      window.history.pushState({}, '', '/pendientes');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } else if (section === 'facturas') {
-      window.history.pushState({}, '', '/facturas');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } else if (section === 'carga-datos') {
-      window.history.pushState({}, '', '/carga-datos');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      // Dashboard es la ruta raíz en React-admin
+      navigate('/');
+    } else {
+      navigate(`/${section}`);
     }
   };
 
@@ -75,10 +71,10 @@ export const Layout = (props) => {
           minHeight: '100vh',
         }}
       >
-        {/* Renderizar solo el contenido sin sidebar/appbar de React-admin */}
+        {/* Renderizar contenido de React-admin directamente */}
+        {/* RALayout puede causar problemas, renderizar children directamente */}
         {props.children}
       </div>
     </div>
   );
 };
-

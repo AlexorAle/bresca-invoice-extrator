@@ -1,17 +1,20 @@
 /**
- * Reporte de Facturas Pendientes - React-admin
- * Migrado desde sección "Pendientes" del Dashboard original
+ * Página de Pendientes - React-admin
+ * Muestra la tabla de facturas pendientes
  */
 import React from 'react';
-import { Box } from '@mui/material';
+import { List } from 'react-admin';
+import { Box, Typography } from '@mui/material';
 import { FacturasTable } from '../../../components/FacturasTable';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
 import { useInvoiceData } from '../../../hooks/useInvoiceData';
 
 /**
- * Lista de facturas pendientes - Diseño original preservado
+ * Lista de facturas pendientes
+ * Envuelto en List de React-admin para que el routing funcione correctamente
  */
-export const ReportePendientes = () => {
+export const ReportePendientes = (props) => {
+  // Ignorar props de React-admin, usar nuestros datos
   // Mes por defecto: julio (7) donde están las facturas procesadas
   const selectedMonth = 7;
   const selectedYear = 2025;
@@ -19,21 +22,33 @@ export const ReportePendientes = () => {
   const { data, loading } = useInvoiceData(selectedMonth, selectedYear);
 
   return (
+    <List {...props} title="Facturas Pendientes" empty={false}>
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#f9fafb',
         padding: 0,
         margin: 0,
       }}
     >
       <div className="p-2 sm:p-4 md:p-6 lg:p-8">
         <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-          <div className="bg-white rounded-2xl shadow-header p-5 sm:p-7 ipad:p-9 mb-4 sm:mb-6">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          {/* Header */}
+          <Box sx={{ mb: 4 }}>
+            <Typography
+              variant="h3"
+              sx={{
+                fontWeight: 700,
+                fontSize: '2rem',
+                color: '#1f2937',
+                mb: 1,
+              }}
+            >
               Facturas Pendientes
-            </h2>
-          </div>
+            </Typography>
+          </Box>
+
+          {/* Tabla de facturas pendientes */}
           {loading ? (
             <LoadingSpinner />
           ) : (
@@ -48,5 +63,6 @@ export const ReportePendientes = () => {
         </div>
       </div>
     </Box>
+    </List>
   );
 };

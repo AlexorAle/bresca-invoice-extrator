@@ -58,7 +58,7 @@ export const ReporteDashboard = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#f9fafb',
         padding: 0,
         margin: 0,
       }}
