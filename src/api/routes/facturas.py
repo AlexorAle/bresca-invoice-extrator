@@ -2,15 +2,21 @@
 Endpoints para facturas
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi.responses import Response
 from starlette.requests import Request
 from typing import Optional, Union
 from datetime import date
 from pydantic import BaseModel, Field
+import pandas as pd
+from io import BytesIO
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 from src.api.dependencies import get_factura_repository
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 from src.api.schemas.facturas import (
     FacturaSummaryResponse,
     FacturaByDayResponse,
@@ -23,6 +29,7 @@ from src.api.schemas.facturas import (
     FailedInvoiceItem,
     FacturaListResponse,
     FacturaListItem,
+    ManualFacturaCreate,
 )
 from src.db.repositories import FacturaRepository
 
@@ -584,3 +591,285 @@ def _parse_date_from_filename(filename: str, default_year: int = None) -> Option
     except Exception:
         return None
 
+
+
+@router.get("/export/excel")
+async def export_facturas_to_excel(
+    month: int = Query(..., ge=1, le=12, description="Mes (1-12)"),
+    year: int = Query(..., ge=2000, le=2100, description="Año"),
+    repo: FacturaRepository = Depends(get_factura_repository)
+):
+    """
+    Exportar facturas del mes a Excel bien formateado
+    """
+    try:
+        # Obtener todas las facturas del mes
+        facturas = repo.get_all_facturas_by_month(month, year)
+        
+        if not facturas:
+            raise HTTPException(status_code=404, detail=f"No hay facturas para {month}/{year}")
+        
+        # Convertir a DataFrame
+        df = pd.DataFrame(facturas)
+        
+        # Renombrar columnas para mejor presentación
+        column_mapping = {
+            'id': 'ID',
+            'proveedor_nombre': 'Proveedor',
+            'categoria': 'Categoría',
+            'fecha_emision': 'Fecha Emisión',
+            'impuestos_total': 'Impuestos',
+            'importe_total': 'Total'
+        }
+        
+        # Seleccionar y renombrar columnas
+        df_export = df[list(column_mapping.keys())].copy()
+        df_export.rename(columns=column_mapping, inplace=True)
+        
+        # Formatear fecha
+        if 'Fecha Emisión' in df_export.columns:
+            df_export['Fecha Emisión'] = pd.to_datetime(df_export['Fecha Emisión'], errors='coerce')
+            df_export['Fecha Emisión'] = df_export['Fecha Emisión'].dt.strftime('%d/%m/%Y')
+        
+        # Formatear números como moneda
+        if 'Impuestos' in df_export.columns:
+            df_export['Impuestos'] = df_export['Impuestos'].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "0.00")
+        
+        if 'Total' in df_export.columns:
+            df_export['Total'] = df_export['Total'].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "0.00")
+        
+        # Crear Excel en memoria
+        output = BytesIO()
+        
+        # Escribir DataFrame a Excel
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_export.to_excel(writer, sheet_name='Facturas', index=False)
+            
+            # Obtener el workbook y worksheet para formatear
+            workbook = writer.book
+            worksheet = writer.sheets['Facturas']
+            
+            # Estilos
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            border_style = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            right_alignment = Alignment(horizontal='right', vertical='center')
+            
+            # Formatear encabezados
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+                cell.border = border_style
+            
+            # Ajustar ancho de columnas
+            column_widths = {
+                'A': 8,   # ID
+                'B': 30,  # Proveedor
+                'C': 20,  # Categoría
+                'D': 15,  # Fecha Emisión
+                'E': 15,  # Impuestos
+                'F': 15   # Total
+            }
+            
+            for col, width in column_widths.items():
+                worksheet.column_dimensions[col].width = width
+            
+            # Formatear celdas de datos
+            for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+                for cell in row:
+                    cell.border = border_style
+                    # Alinear números a la derecha
+                    if cell.column_letter in ['E', 'F']:
+                        cell.alignment = right_alignment
+                    else:
+                        cell.alignment = Alignment(vertical='center')
+            
+            # Agregar fila de totales
+            total_row = worksheet.max_row + 1
+            worksheet.cell(row=total_row, column=4, value="TOTAL:")
+            worksheet.cell(row=total_row, column=4).font = Font(bold=True)
+            worksheet.cell(row=total_row, column=4).alignment = right_alignment
+            
+            # Calcular totales (convertir strings de vuelta a números)
+            total_impuestos = sum(float(str(x).replace(',', '')) if pd.notna(x) and str(x) != '' else 0 
+                                 for x in df['impuestos_total'])
+            total_importe = sum(float(str(x).replace(',', '')) if pd.notna(x) and str(x) != '' else 0 
+                               for x in df['importe_total'])
+            
+            worksheet.cell(row=total_row, column=5, value=f"{total_impuestos:,.2f}")
+            worksheet.cell(row=total_row, column=5).font = Font(bold=True)
+            worksheet.cell(row=total_row, column=5).alignment = right_alignment
+            worksheet.cell(row=total_row, column=5).border = border_style
+            
+            worksheet.cell(row=total_row, column=6, value=f"{total_importe:,.2f}")
+            worksheet.cell(row=total_row, column=6).font = Font(bold=True)
+            worksheet.cell(row=total_row, column=6).alignment = right_alignment
+            worksheet.cell(row=total_row, column=6).border = border_style
+            
+            # Formatear fila de totales
+            for col in range(1, 7):
+                cell = worksheet.cell(row=total_row, column=col)
+                if col < 4:
+                    cell.fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
+                cell.border = border_style
+        
+        output.seek(0)
+        
+        # Generar nombre de archivo
+        meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        filename = f"Facturas_{meses[month]}_{year}.xlsx"
+        
+        return Response(
+            content=output.read(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error al exportar a Excel: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al exportar a Excel: {str(e)}")
+
+
+@router.post("/manual-create", response_model=dict)
+async def create_manual_invoice(
+    factura_data: ManualFacturaCreate,
+    repo: FacturaRepository = Depends(get_factura_repository)
+):
+    """
+    Crear o actualizar factura manualmente desde la sección de pendientes.
+    
+    Lógica:
+    - Si existe factura con mismo drive_file_name en estado 'error'/'revisar': actualizar
+    - Si existe factura con mismo drive_file_name en estado 'procesado': rechazar
+    - Si no existe: crear nueva
+    """
+    try:
+        import hashlib
+        from datetime import datetime, date
+        from decimal import Decimal
+        from sqlalchemy import func
+        
+        drive_file_name = factura_data.drive_file_name
+        logger.info(f"📝 Creando/actualizando factura manual: {drive_file_name}")
+        
+        with repo.db.get_session() as session:
+            from src.db.models import Factura
+            
+            # Buscar factura existente con mismo drive_file_name
+            existing_factura = session.query(Factura).filter(
+                Factura.drive_file_name == drive_file_name
+            ).order_by(Factura.creado_en.desc()).first()
+            
+            if existing_factura:
+                # Si existe y está procesada, rechazar
+                if existing_factura.estado == 'procesado':
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"La factura '{drive_file_name}' ya fue procesada correctamente. No se puede crear duplicado."
+                    )
+                
+                # Si existe y está en error/revisar, actualizar
+                logger.info(f"🔄 Actualizando factura existente (ID: {existing_factura.id}, estado: {existing_factura.estado})")
+                
+                # Actualizar campos
+                existing_factura.proveedor_text = factura_data.proveedor_text
+                existing_factura.fecha_emision = factura_data.fecha_emision
+                existing_factura.importe_total = Decimal(str(factura_data.importe_total))
+                existing_factura.base_imponible = Decimal(str(factura_data.base_imponible))
+                existing_factura.impuestos_total = Decimal(str(factura_data.impuestos_total))
+                existing_factura.iva_porcentaje = Decimal(str(factura_data.iva_porcentaje)) if factura_data.iva_porcentaje else None
+                existing_factura.numero_factura = factura_data.numero_factura
+                existing_factura.moneda = factura_data.moneda or 'EUR'
+                existing_factura.estado = 'procesado'
+                existing_factura.error_msg = None  # Limpiar error
+                existing_factura.fecha_recepcion = datetime.utcnow()
+                existing_factura.actualizado_en = datetime.utcnow()
+                existing_factura.extractor = 'manual'
+                existing_factura.confianza = '100'
+                
+                session.commit()
+                session.refresh(existing_factura)
+                
+                logger.info(f"✅ Factura actualizada exitosamente (ID: {existing_factura.id})")
+                
+                return {
+                    "success": True,
+                    "message": "Factura actualizada exitosamente",
+                    "factura_id": existing_factura.id,
+                    "action": "updated"
+                }
+            else:
+                # No existe, crear nueva
+                logger.info(f"➕ Creando nueva factura manual: {drive_file_name}")
+                
+                # Generar drive_file_id único para facturas manuales
+                timestamp = int(datetime.utcnow().timestamp())
+                hash_name = hashlib.md5(drive_file_name.encode()).hexdigest()[:8]
+                drive_file_id = f"manual_{timestamp}_{hash_name}"
+                
+                # Buscar proveedor por nombre (opcional)
+                proveedor_id = None
+                if factura_data.proveedor_text:
+                    from src.db.models import Proveedor
+                    proveedor = session.query(Proveedor).filter(
+                        func.lower(Proveedor.nombre) == func.lower(factura_data.proveedor_text)
+                    ).first()
+                    if proveedor:
+                        proveedor_id = proveedor.id
+                
+                # Crear nueva factura
+                nueva_factura = Factura(
+                    drive_file_id=drive_file_id,
+                    drive_file_name=drive_file_name,
+                    drive_folder_name='manual',
+                    proveedor_id=proveedor_id,
+                    proveedor_text=factura_data.proveedor_text,
+                    numero_factura=factura_data.numero_factura,
+                    moneda=factura_data.moneda or 'EUR',
+                    fecha_emision=factura_data.fecha_emision,
+                    fecha_recepcion=datetime.utcnow(),
+                    base_imponible=Decimal(str(factura_data.base_imponible)),
+                    impuestos_total=Decimal(str(factura_data.impuestos_total)),
+                    iva_porcentaje=Decimal(str(factura_data.iva_porcentaje)) if factura_data.iva_porcentaje else None,
+                    importe_total=Decimal(str(factura_data.importe_total)),
+                    estado='procesado',
+                    extractor='manual',
+                    confianza='100',
+                    revision=1,
+                    creado_en=datetime.utcnow(),
+                    actualizado_en=datetime.utcnow()
+                )
+                
+                session.add(nueva_factura)
+                session.commit()
+                session.refresh(nueva_factura)
+                
+                logger.info(f"✅ Factura creada exitosamente (ID: {nueva_factura.id})")
+                
+                return {
+                    "success": True,
+                    "message": "Factura creada exitosamente",
+                    "factura_id": nueva_factura.id,
+                    "action": "created"
+                }
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error al crear/actualizar factura manual: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar factura manual: {str(e)}"
+        )

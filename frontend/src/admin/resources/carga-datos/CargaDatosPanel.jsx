@@ -81,6 +81,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, children }) => {
               variant="h5"
               component="span"
               sx={{
+                fontFamily: "'Inter', 'Outfit', sans-serif",
                 fontWeight: 700,
                 fontSize: '1.5rem',
                 color: colors.text,
@@ -165,6 +166,7 @@ const QualityGauge = ({ percentage }) => {
           <Typography
             variant="h3"
             sx={{
+              fontFamily: "'Inter', 'Outfit', sans-serif",
               fontWeight: 700,
               fontSize: '2.5rem',
               color: color,
@@ -176,7 +178,8 @@ const QualityGauge = ({ percentage }) => {
           <Typography
             variant="body2"
             sx={{
-              color: '#6b7280',
+              fontFamily: "'Inter', 'Outfit', sans-serif",
+              color: '#64748b',
               fontSize: '0.875rem',
               mt: 0.5,
             }}
@@ -187,10 +190,10 @@ const QualityGauge = ({ percentage }) => {
       </Box>
       <Box sx={{ width: '100%', mt: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>
+          <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b', fontSize: '0.875rem' }}>
             Procesadas
           </Typography>
-          <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>
+          <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b', fontSize: '0.875rem' }}>
             Total
           </Typography>
         </Box>
@@ -231,7 +234,7 @@ export const CargaDatosPanel = (props) => {
 
   if (loading && !stats) {
     return (
-      <List {...props} title="Carga de Datos" empty={false}>
+      <List {...props} title="Carga de Datos" empty={false} actions={false}>
         <Box
           sx={{
             minHeight: '100vh',
@@ -250,7 +253,7 @@ export const CargaDatosPanel = (props) => {
   }
 
   return (
-    <List {...props} title="Carga de Datos" empty={false}>
+    <List {...props} title="Carga de Datos" empty={false} actions={false}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -267,9 +270,10 @@ export const CargaDatosPanel = (props) => {
                 <Typography
                   variant="h3"
                   sx={{
+                    fontFamily: "'Inter', 'Outfit', sans-serif",
                     fontWeight: 700,
                     fontSize: '2rem',
-                    color: '#1f2937',
+                    color: '#1e293b',
                     mb: 1,
                   }}
                 >
@@ -278,7 +282,8 @@ export const CargaDatosPanel = (props) => {
                 <Typography
                   variant="body1"
                   sx={{
-                    color: '#6b7280',
+                    fontFamily: "'Inter', 'Outfit', sans-serif",
+                    color: '#64748b',
                     fontSize: '1rem',
                   }}
                 >
@@ -324,9 +329,10 @@ export const CargaDatosPanel = (props) => {
                   <Typography
                     variant="h2"
                     sx={{
+                      fontFamily: "'Inter', 'Outfit', sans-serif",
                       fontWeight: 700,
                       fontSize: '3rem',
-                      color: '#1f2937',
+                      color: '#1e293b',
                       mb: 2,
                     }}
                   >
@@ -337,7 +343,8 @@ export const CargaDatosPanel = (props) => {
                     <Typography
                       variant="body2"
                       sx={{
-                        color: '#6b7280',
+                        fontFamily: "'Inter', 'Outfit', sans-serif",
+                        color: '#64748b',
                         fontSize: '0.875rem',
                       }}
                     >
@@ -357,9 +364,10 @@ export const CargaDatosPanel = (props) => {
                   <Typography
                     variant="h2"
                     sx={{
+                      fontFamily: "'Inter', 'Outfit', sans-serif",
                       fontWeight: 700,
                       fontSize: '3rem',
-                      color: '#1f2937',
+                      color: '#1e293b',
                       mb: 2,
                     }}
                   >
@@ -368,19 +376,19 @@ export const CargaDatosPanel = (props) => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <CheckCircle2 size={16} color="#10b981" />
-                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                         {stats?.facturas_procesadas?.toLocaleString() || '0'} Procesadas
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <AlertTriangle size={16} color="#f59e0b" />
-                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                         {stats?.facturas_cuarentena?.toLocaleString() || '0'} Cuarentena
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <XCircle size={16} color="#ef4444" />
-                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                         {stats?.facturas_error?.toLocaleString() || '0'} Error
                       </Typography>
                     </Box>
@@ -397,18 +405,18 @@ export const CargaDatosPanel = (props) => {
                 <Box>
                   <Box sx={{ mb: 3 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                         Archivos Drive
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1f2937' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", fontWeight: 600, color: '#1e293b' }}>
                         {stats?.archivos_drive?.toLocaleString() || '0'}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                         Facturas BD
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1f2937' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", fontWeight: 600, color: '#1e293b' }}>
                         {stats?.facturas_bd?.toLocaleString() || '0'}
                       </Typography>
                     </Box>
@@ -422,7 +430,7 @@ export const CargaDatosPanel = (props) => {
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#1f2937' }}>
+                      <Typography variant="body1" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", fontWeight: 600, color: '#1e293b' }}>
                         Diferencia
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -434,6 +442,7 @@ export const CargaDatosPanel = (props) => {
                         <Typography
                           variant="h6"
                           sx={{
+                            fontFamily: "'Inter', 'Outfit', sans-serif",
                             fontWeight: 700,
                             color: stats?.diferencia === 0 ? '#10b981' : '#f59e0b',
                           }}
@@ -444,7 +453,7 @@ export const CargaDatosPanel = (props) => {
                       </Box>
                     </Box>
                     {stats?.diferencia !== 0 && (
-                      <Typography variant="body2" sx={{ color: '#6b7280', mt: 1, fontSize: '0.75rem' }}>
+                      <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b', mt: 1, fontSize: '0.75rem' }}>
                         {stats.diferencia > 0 ? 'Más archivos en Drive' : 'Más facturas en BD'}
                       </Typography>
                     )}
@@ -460,7 +469,7 @@ export const CargaDatosPanel = (props) => {
               >
                 <QualityGauge percentage={stats?.nivel_calidad || 0} />
                 <Box sx={{ mt: 3, textAlign: 'center' }}>
-                  <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                  <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b', fontSize: '0.875rem' }}>
                     {stats?.facturas_procesadas?.toLocaleString() || '0'} procesadas de {stats?.archivos_drive?.toLocaleString() || '0'} archivos en Drive
                   </Typography>
                 </Box>

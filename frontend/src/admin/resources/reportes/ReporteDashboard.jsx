@@ -10,6 +10,8 @@ import { FacturasTable } from '../../../components/FacturasTable';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
 import { useInvoiceData } from '../../../hooks/useInvoiceData';
 import { sanitizeErrorMessage } from '../../../utils/api';
+import { Button } from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
 
 /**
  * Dashboard principal de reportes - Diseño original preservado
@@ -20,6 +22,41 @@ export const ReporteDashboard = () => {
   const [selectedYear, setSelectedYear] = useState(2025);
 
   const { data, loading, error } = useInvoiceData(selectedMonth, selectedYear);
+
+  const handleExportExcel = async () => {
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/invoice-api/api';
+      const url = `${apiBaseUrl}/facturas/export/excel?month=${selectedMonth}&year=${selectedYear}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      const url_blob = window.URL.createObjectURL(blob);
+      link.href = url_blob;
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `Facturas_${selectedMonth}_${selectedYear}.xlsx`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url_blob);
+    } catch (error) {
+      console.error('Error al exportar a Excel:', error);
+      alert('Error al exportar a Excel. Por favor, intente nuevamente.');
+    }
+  };
 
   if (error) {
     // Formatear mensaje de error de forma legible
@@ -58,19 +95,43 @@ export const ReporteDashboard = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#f9fafb',
+        backgroundColor: '#f8fafc', // Fondo General
         padding: 0,
         margin: 0,
       }}
     >
       <div className="p-2 sm:p-4 md:p-6 lg:p-8">
         <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-          <Header 
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            onMonthChange={setSelectedMonth}
-            onYearChange={setSelectedYear}
-          />
+          <Box sx={{ mb: 4 }}>
+            <Header 
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              onMonthChange={setSelectedMonth}
+              onYearChange={setSelectedYear}
+            />
+          </Box>
+
+          {/* Botón de exportación a Excel */}
+          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              onClick={handleExportExcel}
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              sx={{
+                backgroundColor: '#10b981',
+                color: '#ffffff',
+                fontWeight: 600,
+                padding: '10px 20px',
+                borderRadius: '8px',
+                textTransform: 'none',
+                '&:hover': {
+                  backgroundColor: '#059669',
+                },
+              }}
+            >
+              Exportar a Excel
+            </Button>
+          </Box>
 
           {loading ? (
             <LoadingSpinner />

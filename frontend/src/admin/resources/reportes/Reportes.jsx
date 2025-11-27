@@ -71,6 +71,7 @@ const ReportCard = ({ title, icon: Icon, color, children, yearSelector }) => {
               variant="h5"
               component="span"
               sx={{
+                fontFamily: "'Inter', 'Outfit', sans-serif",
                 fontWeight: 700,
                 fontSize: '1.5rem',
                 color: colors.text,
@@ -330,7 +331,7 @@ const VentasPorMes = ({ selectedYear, onYearChange, facturas }) => {
       <Box sx={{ width: '100%', height: 400 }}>
         {chartData.every(item => item.total === 0) ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+            <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
               No hay datos para el año {selectedYear}
             </Typography>
           </Box>
@@ -362,14 +363,14 @@ const VentasPorMes = ({ selectedYear, onYearChange, facturas }) => {
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <XAxis 
                 dataKey="mes" 
-                tick={{ fontSize: 12, fill: '#6b7280', fontWeight: 500 }}
+                tick={{ fontSize: 12, fill: '#64748b', fontWeight: 500, fontFamily: "'Inter', 'Outfit', sans-serif" }}
                 angle={-45}
                 textAnchor="end"
                 height={80}
                 axisLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
               />
               <YAxis 
-                tick={{ fontSize: 12, fill: '#6b7280', fontWeight: 500 }}
+                tick={{ fontSize: 12, fill: '#64748b', fontWeight: 500, fontFamily: "'Inter', 'Outfit', sans-serif" }}
                 tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                 axisLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
               />
@@ -383,8 +384,9 @@ const VentasPorMes = ({ selectedYear, onYearChange, facturas }) => {
                   padding: '12px 16px',
                 }}
                 labelStyle={{ 
+                  fontFamily: "'Inter', 'Outfit', sans-serif",
                   fontWeight: 600, 
-                  color: '#1f2937',
+                  color: '#1e293b',
                   marginBottom: '8px',
                 }}
                 cursor={{ fill: 'rgba(147, 51, 234, 0.1)' }}
@@ -455,7 +457,8 @@ const TopProveedores = ({ selectedMonth, selectedYear, onMonthChange, onYearChan
         <Typography
           variant="body2"
           sx={{
-            color: '#6b7280',
+            fontFamily: "'Inter', 'Outfit', sans-serif",
+            color: '#64748b',
             textAlign: 'center',
             py: 4,
           }}
@@ -496,8 +499,9 @@ const TopProveedores = ({ selectedMonth, selectedYear, onMonthChange, onYearChan
                 <Typography
                   variant="body1"
                   sx={{
+                    fontFamily: "'Inter', 'Outfit', sans-serif",
                     fontWeight: 600,
-                    color: '#1f2937',
+                    color: '#1e293b',
                     fontSize: '1rem',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -510,8 +514,9 @@ const TopProveedores = ({ selectedMonth, selectedYear, onMonthChange, onYearChan
               <Typography
                 variant="body1"
                 sx={{
+                  fontFamily: "'Inter', 'Outfit', sans-serif",
                   fontWeight: 700,
-                  color: '#1f2937',
+                  color: '#1e293b',
                   fontSize: '1rem',
                   flexShrink: 0,
                 }}
@@ -543,7 +548,8 @@ const TendenciaAnual = () => {
       <Typography
         variant="body2"
         sx={{
-          color: '#6b7280',
+          fontFamily: "'Inter', 'Outfit', sans-serif",
+          color: '#64748b',
           fontSize: '0.875rem',
         }}
       >
@@ -560,9 +566,10 @@ const TendenciaAnual = () => {
 import { List } from 'react-admin';
 
 export const Reportes = (props) => {
-  // Estado para el año seleccionado (por defecto 2025 donde hay datos)
-  const [selectedYear, setSelectedYear] = useState(2025);
-  const [selectedMonthTopProveedores, setSelectedMonthTopProveedores] = useState(new Date().getMonth()); // Mes actual (0-11)
+  // Inicializar con año y mes actuales
+  const currentDate = new Date();
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [selectedMonthTopProveedores, setSelectedMonthTopProveedores] = useState(currentDate.getMonth()); // Mes actual (0-11)
   const [allFacturasAnio, setAllFacturasAnio] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -621,7 +628,7 @@ export const Reportes = (props) => {
   }, [allFacturasAnio, selectedYear]);
 
   return (
-    <List {...props} title="Reportes" empty={false}>
+    <List {...props} title="Reportes" empty={false} actions={false}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -637,9 +644,10 @@ export const Reportes = (props) => {
               <Typography
                 variant="h3"
                 sx={{
+                  fontFamily: "'Inter', 'Outfit', sans-serif",
                   fontWeight: 700,
                   fontSize: '2rem',
-                  color: '#1f2937',
+                  color: '#1e293b',
                   mb: 1,
                 }}
               >
@@ -648,7 +656,8 @@ export const Reportes = (props) => {
               <Typography
                 variant="body1"
                 sx={{
-                  color: '#6b7280',
+                  fontFamily: "'Inter', 'Outfit', sans-serif",
+                  color: '#64748b',
                   fontSize: '1rem',
                 }}
               >
@@ -670,9 +679,9 @@ export const Reportes = (props) => {
                 mb: 3,
               }}
             >
-              {/* Ventas por Mes */}
+              {/* Pago a Proveedores */}
               <ReportCard
-                title="Ventas por Mes"
+                title="Pago a Proveedores"
                 icon={BarChart3}
                 color="purple"
                 yearSelector={
@@ -684,7 +693,7 @@ export const Reportes = (props) => {
               >
                 {loading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                    <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                       Cargando...
                     </Typography>
                   </Box>
@@ -713,7 +722,7 @@ export const Reportes = (props) => {
               >
                 {loading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                    <Typography variant="body2" sx={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#64748b' }}>
                       Cargando...
                     </Typography>
                   </Box>
