@@ -4,7 +4,8 @@
  */
 import React, { useState, useEffect } from 'react';
 import { List } from 'react-admin';
-import { Box, Typography, Card, CardContent, CardHeader, Button, CircularProgress } from '@mui/material';
+import { Box, Typography, Card, CardContent, CardHeader, Button, CircularProgress, Tabs, Tab } from '@mui/material';
+import { SPACING, PAGE_LAYOUT, BUTTON_HEIGHTS, BORDER_RADIUS, CARD_STYLES } from '../../styles/designTokens';
 import { 
   Cloud, 
   Database, 
@@ -13,10 +14,12 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   XCircle,
-  RefreshCcw
+  RefreshCcw,
+  Tag
 } from 'lucide-react';
 import { Cell, PieChart, Pie, ResponsiveContainer, Legend } from 'recharts';
 import { fetchDataLoadStats } from '../../../utils/api';
+import { CategoriasList } from '../categorias/CategoriasList';
 
 /**
  * Tarjeta de estadística individual
@@ -50,9 +53,9 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, children }) => {
   return (
     <Card
       sx={{
-        borderRadius: '16px',
+        borderRadius: BORDER_RADIUS.xl,
         border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+        boxShadow: CARD_STYLES.boxShadow,
         overflow: 'hidden',
         height: '100%',
         display: 'flex',
@@ -68,7 +71,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, children }) => {
         sx={{
           backgroundColor: colors.bg,
           color: colors.text,
-          padding: '20px 24px',
+          padding: CARD_STYLES.padding,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -95,7 +98,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, children }) => {
       />
       <CardContent
         sx={{
-          padding: '24px',
+          padding: CARD_STYLES.padding,
           flex: 1,
           backgroundColor: '#ffffff',
         }}
@@ -203,12 +206,13 @@ const QualityGauge = ({ percentage }) => {
 };
 
 /**
- * Panel de Carga de Datos
+ * Panel de Carga de Datos con Tabs
  */
 export const CargaDatosPanel = (props) => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('estadisticas'); // 'estadisticas' o 'categorias'
 
   const fetchStats = async () => {
     try {
@@ -234,7 +238,7 @@ export const CargaDatosPanel = (props) => {
 
   if (loading && !stats) {
     return (
-      <List {...props} title="Carga de Datos" empty={false} actions={false}>
+      <List {...props} title="Datos" empty={false} actions={false}>
         <Box
           sx={{
             minHeight: '100vh',
@@ -253,7 +257,7 @@ export const CargaDatosPanel = (props) => {
   }
 
   return (
-    <List {...props} title="Carga de Datos" empty={false} actions={false}>
+    <List {...props} title="Datos" empty={false} actions={false}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -264,8 +268,14 @@ export const CargaDatosPanel = (props) => {
       >
         <div className="p-2 sm:p-4 md:p-6 lg:p-8">
           <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-            {/* Header */}
-            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Título - PRIORIDAD 1: margin-top: 48px */}
+            <Box sx={{ 
+              mt: PAGE_LAYOUT.titleMarginTop, 
+              mb: SPACING.sm,
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+            }}>
               <Box>
                 <Typography
                   variant="h3"
@@ -274,39 +284,86 @@ export const CargaDatosPanel = (props) => {
                     fontWeight: 700,
                     fontSize: '2rem',
                     color: '#1e293b',
-                    mb: 1,
+                    margin: 0,
                   }}
                 >
-                  Carga de Datos
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    fontFamily: "'Inter', 'Outfit', sans-serif",
-                    color: '#64748b',
-                    fontSize: '1rem',
-                  }}
-                >
-                  Monitoreo en tiempo real del sistema
+                  Datos
                 </Typography>
               </Box>
-              <Button
-                variant="contained"
-                startIcon={<RefreshCcw size={18} />}
-                onClick={handleRefresh}
-                disabled={refreshing}
+              {activeTab === 'estadisticas' && (
+                <Button
+                  variant="contained"
+                  startIcon={<RefreshCcw size={18} />}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  sx={{
+                    height: BUTTON_HEIGHTS.primary,
+                    backgroundColor: '#3b82f6',
+                    padding: `0 ${SPACING.md}`,
+                    borderRadius: BORDER_RADIUS.md,
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    '&:hover': {
+                      backgroundColor: '#2563eb',
+                    },
+                  }}
+                >
+                  {refreshing ? 'Actualizando...' : 'Actualizar'}
+                </Button>
+              )}
+            </Box>
+
+            {/* Tabs para navegar entre Estadísticas y Categorías */}
+            <Box sx={{ mb: PAGE_LAYOUT.sectionSpacing, borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={activeTab} 
+                onChange={(e, newValue) => setActiveTab(newValue)}
                 sx={{
-                  backgroundColor: '#3b82f6',
-                  '&:hover': {
-                    backgroundColor: '#2563eb',
+                  '& .MuiTab-root': {
+                    fontFamily: "'Inter', 'Outfit', sans-serif",
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    textTransform: 'none',
+                    minHeight: '48px',
+                  },
+                  '& .Mui-selected': {
+                    color: '#3b82f6',
                   },
                 }}
               >
-                {refreshing ? 'Actualizando...' : 'Actualizar'}
-              </Button>
+                <Tab 
+                  label="Estadísticas" 
+                  value="estadisticas"
+                  icon={<Database size={18} />}
+                  iconPosition="start"
+                />
+                <Tab 
+                  label="Categorías" 
+                  value="categorias"
+                  icon={<Tag size={18} />}
+                  iconPosition="start"
+                />
+              </Tabs>
             </Box>
 
-            {/* Grid de tarjetas */}
+            {/* Contenido según tab activo */}
+            {activeTab === 'estadisticas' ? (
+              <>
+                {/* Subtítulo descriptivo */}
+                <Box sx={{ mb: PAGE_LAYOUT.sectionSpacing }}>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontFamily: "'Inter', 'Outfit', sans-serif",
+                      color: '#64748b',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    Monitoreo en tiempo real del sistema
+                  </Typography>
+                </Box>
+
+            {/* Grid de tarjetas superiores - gap: 16px horizontal */}
             <Box
               sx={{
                 display: 'grid',
@@ -316,7 +373,8 @@ export const CargaDatosPanel = (props) => {
                   md: 'repeat(2, 1fr)',
                   lg: 'repeat(2, 1fr)',
                 },
-                gap: 3,
+                gap: PAGE_LAYOUT.gridGap,
+                mb: PAGE_LAYOUT.titleMarginBottom,
               }}
             >
               {/* Tarjeta 1: Archivos en Drive */}
@@ -475,6 +533,12 @@ export const CargaDatosPanel = (props) => {
                 </Box>
               </StatCard>
             </Box>
+              </>
+            ) : (
+              <Box>
+                <CategoriasList {...props} embedded={true} />
+              </Box>
+            )}
           </div>
         </div>
       </Box>

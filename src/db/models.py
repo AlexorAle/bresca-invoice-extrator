@@ -10,17 +10,42 @@ from datetime import datetime
 Base = declarative_base()
 
 class Proveedor(Base):
-    """Tabla de proveedores/clientes"""
+    """Tabla de proveedores/clientes (LEGACY - mantener para compatibilidad)"""
     __tablename__ = 'proveedores'
     
     id = Column(Integer, primary_key=True)
     nombre = Column(Text, nullable=False, unique=True)
+    categoria = Column(Text)  # Nueva columna para categorización
     nif_cif = Column(Text)
     email_contacto = Column(Text)
     creado_en = Column(DateTime, default=datetime.utcnow)
     
     # Relación con facturas
     facturas = relationship("Factura", back_populates="proveedor")
+
+
+class ProveedorMaestro(Base):
+    """Tabla maestra de proveedores normalizados y unificados"""
+    __tablename__ = 'proveedores_maestros'
+    
+    id = Column(Integer, primary_key=True)
+    nombre_canonico = Column(Text, nullable=False, unique=True)
+    nif_cif = Column(Text, unique=True, nullable=True)
+    nombres_alternativos = Column(JSONB, nullable=False, default=list)
+    total_facturas = Column(Integer, default=0)
+    total_importe = Column(DECIMAL(18, 2), default=0.00)
+    categoria = Column(Text, nullable=True)
+    activo = Column(Boolean, default=True)
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
+    fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación con facturas (opcional, para tracking)
+    facturas = relationship("Factura", foreign_keys="Factura.proveedor_maestro_id", back_populates="proveedor_maestro")
+    
+    __table_args__ = (
+        Index('idx_proveedores_maestros_nif', 'nif_cif', postgresql_where=(nif_cif != None)),
+        Index('idx_proveedores_maestros_nombre', 'nombre_canonico'),
+    )
 
 class Factura(Base):
     """Tabla principal de facturas"""
@@ -33,6 +58,7 @@ class Factura(Base):
     
     proveedor_id = Column(BigInteger, ForeignKey('proveedores.id'))
     proveedor_text = Column(Text)
+    proveedor_maestro_id = Column(Integer, ForeignKey('proveedores_maestros.id'), nullable=True)
     numero_factura = Column(Text)
     moneda = Column(Text, default='EUR')
     fecha_emision = Column(Date)
@@ -67,8 +93,10 @@ class Factura(Base):
     creado_en = Column(DateTime, default=datetime.utcnow)
     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relación con proveedor
+    # Relación con proveedor (legacy)
     proveedor = relationship("Proveedor", back_populates="facturas")
+    # Relación con proveedor maestro
+    proveedor_maestro = relationship("ProveedorMaestro", back_populates="facturas")
     
     # Constraints
     __table_args__ = (
@@ -106,3 +134,20 @@ class SyncState(Base):
     key = Column(Text, primary_key=True)
     value = Column(Text, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Categoria(Base):
+    """Tabla de categorías para proveedores y otros usos"""
+    __tablename__ = 'categorias'
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(Text, nullable=False, unique=True)
+    descripcion = Column(Text, nullable=True)
+    color = Column(Text, default='#3b82f6')  # Color hexadecimal para identificación visual
+    activo = Column(Boolean, default=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+    actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_categorias_nombre', 'nombre'),
+        Index('idx_categorias_activo', 'activo', postgresql_where=(activo == True)),
+    )

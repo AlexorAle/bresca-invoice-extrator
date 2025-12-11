@@ -53,6 +53,37 @@ export const dataProvider = {
       let endpoint = '';
       let response = null;
 
+      if (resource === 'proveedores') {
+        // Construir parámetros para proveedores
+        const queryParams = new URLSearchParams();
+        queryParams.append('_start', (page - 1) * perPage);
+        queryParams.append('_end', page * perPage);
+        
+        if (field) {
+          queryParams.append('_sort', field);
+          queryParams.append('_order', order);
+        }
+        
+        // Aplicar filtros
+        if (filter.search) {
+          queryParams.append('search', filter.search);
+        }
+        if (filter.letra) {
+          queryParams.append('letra', filter.letra);
+        }
+        if (filter.categoria) {
+          queryParams.append('categoria', filter.categoria);
+        }
+        
+        endpoint = `/proveedores?${queryParams.toString()}`;
+        response = await fetchAPI(endpoint);
+        
+        return {
+          data: response,
+          total: response.length, // El backend no devuelve count separado
+        };
+      }
+      
       if (resource === 'facturas') {
         // Construir endpoint con filtros
         const month = filter.month || new Date().getMonth() + 1;
@@ -116,9 +147,31 @@ export const dataProvider = {
         };
       }
 
-      // Para recursos personalizados (pendientes, reportes, carga-datos)
+      if (resource === 'categorias') {
+        // Construir parámetros para categorías
+        const queryParams = new URLSearchParams();
+        queryParams.append('skip', (page - 1) * perPage);
+        queryParams.append('limit', perPage);
+        
+        if (filter.search) {
+          queryParams.append('search', filter.search);
+        }
+        if (filter.activo !== undefined) {
+          queryParams.append('activo', filter.activo);
+        }
+        
+        endpoint = `/categorias?${queryParams.toString()}`;
+        response = await fetchAPI(endpoint);
+        
+        return {
+          data: response,
+          total: response.length, // El backend no devuelve count separado
+        };
+      }
+
+      // Para recursos personalizados (pendientes, reportes, datos)
       // que no usan el dataProvider, devolver estructura vacía
-      if (resource === 'pendientes' || resource === 'reportes' || resource === 'carga-datos') {
+      if (resource === 'pendientes' || resource === 'reportes' || resource === 'datos') {
         return {
           data: [],
           total: 0,
@@ -142,6 +195,22 @@ export const dataProvider = {
 
   getOne: async (resource, params) => {
     try {
+      if (resource === 'proveedores') {
+        const endpoint = `/proveedores/${params.id}`;
+        const response = await fetchAPI(endpoint);
+        return {
+          data: response,
+        };
+      }
+      
+      if (resource === 'categorias') {
+        const endpoint = `/categorias/${params.id}`;
+        const response = await fetchAPI(endpoint);
+        return {
+          data: response,
+        };
+      }
+      
       if (resource === 'facturas') {
         // Buscar factura por ID en la lista
         const month = params.filter?.month || new Date().getMonth() + 1;
@@ -178,7 +247,7 @@ export const dataProvider = {
     try {
       // Por ahora, usar getList y filtrar por IDs
       const result = await dataProvider.getList(resource, {
-        pagination: { page: 1, perPage: 1000 },
+        pagination: { page: 1, perPage: 500 },
         sort: {},
         filter: {},
       });
@@ -205,12 +274,42 @@ export const dataProvider = {
   },
 
   create: async (resource, params) => {
+    if (resource === 'categorias') {
+      const endpoint = `/categorias`;
+      const response = await fetchAPI(endpoint, {
+        method: 'POST',
+        body: JSON.stringify(params.data),
+      });
+      return {
+        data: response,
+      };
+    }
     // Por ahora, no soportado (backend no tiene endpoint de creación)
     throw new Error(`Create no implementado para ${resource}`);
   },
 
   update: async (resource, params) => {
-    // Por ahora, no soportado (backend no tiene endpoint de actualización)
+    if (resource === 'proveedores') {
+      const endpoint = `/proveedores/${params.id}`;
+      const response = await fetchAPI(endpoint, {
+        method: 'PUT',
+        body: JSON.stringify(params.data),
+      });
+      return {
+        data: response,
+      };
+    }
+    if (resource === 'categorias') {
+      const endpoint = `/categorias/${params.id}`;
+      const response = await fetchAPI(endpoint, {
+        method: 'PUT',
+        body: JSON.stringify(params.data),
+      });
+      return {
+        data: response,
+      };
+    }
+    // Por ahora, no soportado para otros recursos
     throw new Error(`Update no implementado para ${resource}`);
   },
 
@@ -220,6 +319,15 @@ export const dataProvider = {
   },
 
   delete: async (resource, params) => {
+    if (resource === 'categorias') {
+      const endpoint = `/categorias/${params.id}`;
+      await fetchAPI(endpoint, {
+        method: 'DELETE',
+      });
+      return {
+        data: { id: params.id },
+      };
+    }
     // Por ahora, no soportado (backend no tiene endpoint de eliminación)
     throw new Error(`Delete no implementado para ${resource}`);
   },
