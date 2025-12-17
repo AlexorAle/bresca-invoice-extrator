@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, FileText, Upload, ChevronLeft, Receipt, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, Upload, ChevronLeft, Receipt, AlertCircle, Users } from 'lucide-react';
 
 export function Sidebar({ activeSection, onSectionChange, onCollapseChange }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -26,35 +26,56 @@ export function Sidebar({ activeSection, onSectionChange, onCollapseChange }) {
       label: 'Reportes',
       icon: FileText,
     },
+    // {
+    //   id: 'facturas',
+    //   label: 'Facturas',
+    //   icon: Receipt,
+    // },
     {
-      id: 'carga-datos',
-      label: 'Carga de Datos',
+      id: 'proveedores',
+      label: 'Proveedores',
+      icon: Users,
+    },
+    {
+      id: 'datos',
+      label: 'Datos',
       icon: Upload,
     },
   ];
 
   return (
     <div
-      className={`bg-gradient-to-b from-slate-900 to-slate-800 h-screen fixed left-0 top-0 transition-all duration-300 ease-in-out ${
+      className={`h-screen fixed left-0 top-0 transition-all duration-300 ease-in-out ${
         isCollapsed ? 'w-16' : 'w-64'
-      } shadow-2xl z-50`}
+      } z-50`}
+      style={{
+        backgroundColor: '#1e3a8a', // Fondo Base
+        boxShadow: '2px 0 8px rgba(30, 58, 138, 0.1)', // Sombra Sidebar
+      }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-700">
+      <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'rgba(224, 231, 255, 0.2)' }}>
         {!isCollapsed && (
           <div className="flex items-center gap-2">
-            <Receipt className="text-white" size={24} />
-            <span className="text-white font-semibold text-lg">Facturación</span>
+            <Receipt size={24} style={{ color: '#e0e7ff' }} />
+            <span className="font-semibold text-lg" style={{ color: '#e0e7ff' }}>Facturación</span>
           </div>
         )}
         {isCollapsed && (
           <div className="flex items-center justify-center w-full">
-            <Receipt className="text-white" size={24} />
+            <Receipt size={24} style={{ color: '#e0e7ff' }} />
           </div>
         )}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="text-white hover:bg-slate-700 p-1.5 rounded-lg transition-colors"
+            className="p-1.5 rounded-lg transition-all duration-200"
+            style={{ color: '#e0e7ff' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#1e40af'; // Hover
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
           aria-label={isCollapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
         >
           <ChevronLeft
@@ -75,15 +96,27 @@ export function Sidebar({ activeSection, onSectionChange, onCollapseChange }) {
               key={item.id}
               onClick={() => onSectionChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                isActive
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'text-white hover:bg-slate-700'
-              } ${isCollapsed ? 'justify-center' : ''}`}
+                isCollapsed ? 'justify-center' : ''
+              }`}
+              style={{
+                backgroundColor: isActive ? '#2563eb' : 'transparent', // Activo: #2563eb
+                color: '#e0e7ff', // Texto
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = '#1e40af'; // Hover
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }
+              }}
               title={isCollapsed ? item.label : ''}
             >
-              <Icon size={20} className="flex-shrink-0" />
+              <Icon size={20} className="flex-shrink-0" style={{ color: '#e0e7ff' }} />
               {!isCollapsed && (
-                <span className="font-medium">{item.label}</span>
+                <span className="font-medium" style={{ color: '#e0e7ff' }}>{item.label}</span>
               )}
             </button>
           );

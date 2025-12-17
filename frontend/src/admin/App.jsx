@@ -13,7 +13,9 @@ import { ReporteDashboard } from './resources/reportes/ReporteDashboard';
 import { ReportePendientes } from './resources/reportes/ReportePendientes';
 import { Reportes } from './resources/reportes/Reportes';
 import { CargaDatosPanel } from './resources/carga-datos/CargaDatosPanel';
-import { FileText, LayoutDashboard, AlertCircle, Upload } from 'lucide-react';
+import { ProveedorList, ProveedorEdit } from './resources/proveedores';
+import { CategoriasList, CategoriaCreate, CategoriaEdit } from './resources/categorias';
+import { FileText, LayoutDashboard, AlertCircle, Upload, Tag } from 'lucide-react';
 
 /**
  * Componente de icono personalizado para React-admin
@@ -50,18 +52,33 @@ export const AdminApp = () => {
         list={Reportes}
         options={{ label: 'Reportes' }}
       />
-      {/* Facturas - Resource estándar de React-admin */}
-      <Resource
+      {/* Facturas - Resource estándar de React-admin - OCULTO TEMPORALMENTE */}
+      {/* <Resource
         name="facturas"
         list={FacturaList}
         show={FacturaShow}
         options={{ label: 'Facturas' }}
-      />
-      {/* Carga de Datos - Resource con list personalizado */}
+      /> */}
+      {/* Proveedores - Gestión de proveedores y categorías */}
       <Resource
-        name="carga-datos"
+        name="proveedores"
+        list={ProveedorList}
+        edit={ProveedorEdit}
+        options={{ label: 'Proveedores' }}
+      />
+      {/* Datos - Resource con list personalizado */}
+      <Resource
+        name="datos"
         list={CargaDatosPanel}
-        options={{ label: 'Carga de Datos' }}
+        options={{ label: 'Datos' }}
+      />
+      {/* Categorías - Resource para gestión de categorías */}
+      <Resource
+        name="categorias"
+        list={CategoriasList}
+        create={CategoriaCreate}
+        edit={CategoriaEdit}
+        options={{ label: 'Categorías' }}
       />
     </Admin>
   );

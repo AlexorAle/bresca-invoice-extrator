@@ -11,7 +11,7 @@ from .models import Factura, Proveedor, IngestEvent, SyncState
 from .database import Database
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 class FacturaRepository:
     """Repositorio para operaciones con facturas"""
@@ -162,26 +162,71 @@ class FacturaRepository:
             ID de la factura insertada/actualizada
         """
         with self.db.get_session() as session:
-            # NORMALIZACIÓN: Si viene proveedor_text pero no proveedor_id, buscar/crear proveedor
+            # NUEVO SISTEMA: Usar proveedores_maestros
             proveedor_text = factura_data.get('proveedor_text')
-            if proveedor_text and not factura_data.get('proveedor_id'):
-                # Buscar proveedor existente
-                proveedor = session.query(Proveedor).filter(
-                    Proveedor.nombre == proveedor_text
-                ).first()
-                
-                if not proveedor:
-                    # Crear nuevo proveedor
-                    proveedor = Proveedor(nombre=proveedor_text)
-                    session.add(proveedor)
-                    session.flush()  # Para obtener el ID
-                    logger.debug(f"Nuevo proveedor creado: {proveedor_text}")
-                
-                # Establecer proveedor_id
-                factura_data['proveedor_id'] = proveedor.id
-                # Mantener proveedor_text como denormalizado para compatibilidad
-                if 'proveedor_text' not in factura_data:
-                    factura_data['proveedor_text'] = proveedor_text
+            proveedor_nif = factura_data.get('proveedor_nif')
+            
+            if proveedor_text and not factura_data.get('proveedor_maestro_id'):
+                try:
+                    from src.utils.proveedor_finder import normalizar_y_buscar_proveedor
+                    from src.db.models import ProveedorMaestro
+                    
+                    # Buscar o crear proveedor maestro
+                    resultado = normalizar_y_buscar_proveedor(
+                        nombre_raw=proveedor_text,
+                        nif=proveedor_nif,
+                        session=session
+                    )
+                    
+                    # Establecer proveedor_maestro_id
+                    factura_data['proveedor_maestro_id'] = resultado['proveedor_maestro_id']
+                    factura_data['proveedor_text'] = resultado['nombre_canonico']
+                    
+                    # También mantener proveedor_id para compatibilidad (buscar en tabla legacy)
+                    from src.db.models import Proveedor
+                    proveedor_legacy = session.query(Proveedor).filter(
+                        Proveedor.nombre == resultado['nombre_canonico']
+                    ).first()
+                    
+                    if proveedor_legacy:
+                        factura_data['proveedor_id'] = proveedor_legacy.id
+                    else:
+                        # Crear en tabla legacy también para compatibilidad
+                        proveedor_legacy = Proveedor(
+                            nombre=resultado['nombre_canonico'],
+                            nif_cif=proveedor_nif.strip().upper() if proveedor_nif and proveedor_nif.strip() else None
+                        )
+                        session.add(proveedor_legacy)
+                        session.flush()
+                        factura_data['proveedor_id'] = proveedor_legacy.id
+                    
+                    logger.debug(
+                        f"Proveedor maestro encontrado/creado: {resultado['nombre_canonico']} "
+                        f"(método: {resultado['metodo']}, confianza: {resultado['confianza']:.1f}%)"
+                    )
+                    
+                except ImportError:
+                    # Fallback al sistema antiguo si no está disponible el nuevo
+                    logger.warning("Sistema de proveedores_maestros no disponible, usando sistema legacy")
+                    from src.utils.proveedor_normalizer import normalize_proveedor_name
+                    from src.db.models import Proveedor
+                    
+                    nombre_normalizado = normalize_proveedor_name(proveedor_text)
+                    proveedor = session.query(Proveedor).filter(
+                        Proveedor.nombre == proveedor_text
+                    ).first()
+                    
+                    if not proveedor:
+                        proveedor = Proveedor(
+                            nombre=proveedor_text,
+                            nif_cif=proveedor_nif.strip().upper() if proveedor_nif and proveedor_nif.strip() else None
+                        )
+                        session.add(proveedor)
+                        session.flush()
+                    
+                    factura_data['proveedor_id'] = proveedor.id
+                    if 'proveedor_text' not in factura_data:
+                        factura_data['proveedor_text'] = proveedor_text
             
             # Preparar datos para insert
             stmt = insert(Factura).values(**factura_data)
@@ -495,6 +540,49 @@ class FacturaRepository:
                     'proveedor_nombre': f.proveedor_text,
                     'categoria': f.drive_folder_name,  # Nombre de la carpeta = categoría
                     'fecha_emision': f.fecha_emision.isoformat() if f.fecha_emision else None,
+                    'impuestos_total': float(f.impuestos_total) if f.impuestos_total else 0.0,
+                    'importe_total': float(f.importe_total) if f.importe_total else 0.0
+                }
+                for f in facturas
+            ]
+    
+    def get_facturas_pendientes_by_month(self, month: int, year: int) -> List[dict]:
+        """
+        Obtener solo las facturas pendientes del mes (estado 'error' o sin importe_total)
+        
+        Args:
+            month: Mes (1-12)
+            year: Año
+        
+        Returns:
+            Lista de diccionarios con las facturas pendientes del mes
+        """
+        with self.db.get_session() as session:
+            start_date = date(year, month, 1)
+            _, last_day = monthrange(year, month)
+            end_date = date(year, month, last_day)
+            
+            # Usar fecha_emision si existe, sino usar fecha_recepcion
+            fecha_filtro = func.coalesce(Factura.fecha_emision, Factura.fecha_recepcion)
+            
+            # Filtrar solo facturas pendientes: estado == 'error' o importe_total is None
+            facturas = session.query(Factura).filter(
+                fecha_filtro >= start_date,
+                fecha_filtro <= end_date,
+                (Factura.estado == 'error') | (Factura.importe_total.is_(None))
+            ).order_by(
+                fecha_filtro.desc(),
+                Factura.creado_en.desc()
+            ).all()
+            
+            return [
+                {
+                    'id': f.id,
+                    'proveedor_nombre': f.proveedor_text,
+                    'categoria': f.drive_folder_name,  # Nombre de la carpeta = categoría
+                    'fecha_emision': f.fecha_emision.isoformat() if f.fecha_emision else None,
+                    'estado': f.estado,
+                    'motivo_error': f.motivo_rechazo if hasattr(f, 'motivo_rechazo') else None,
                     'impuestos_total': float(f.impuestos_total) if f.impuestos_total else 0.0,
                     'importe_total': float(f.importe_total) if f.importe_total else 0.0
                 }

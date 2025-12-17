@@ -17,7 +17,7 @@ from enum import Enum
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 class DuplicateDecision(Enum):
     """Decisiones posibles para duplicados"""

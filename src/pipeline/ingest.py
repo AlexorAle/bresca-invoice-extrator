@@ -18,7 +18,7 @@ from src.pdf_utils import validate_pdf, cleanup_temp_file
 from src.logging_conf import get_logger
 from src.pipeline.duplicate_manager import DuplicateManager, DuplicateDecision
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Database, force_reprocess: bool = False) -> dict:
     """
@@ -112,7 +112,7 @@ def process_batch(files_list: List[dict], extractor: InvoiceExtractor, db: Datab
             
             # Espera de 3 segundos entre facturas para evitar rate limiting de OpenAI
             if idx > 1:  # No esperar antes de la primera factura
-                time.sleep(3)
+                time.sleep(5)  # Delay de 5 segundos para evitar rate limits de OpenAI
             
             raw_data = extractor.extract_invoice_data(local_path)
             

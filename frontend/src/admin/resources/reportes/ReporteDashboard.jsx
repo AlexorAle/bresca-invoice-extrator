@@ -1,20 +1,21 @@
 /**
- * Dashboard de Reportes - React-admin
+ * Facturas - Vista principal de facturas
  * Migrado completamente desde Dashboard.jsx manteniendo diseño original
  */
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
-import { Header } from '../../../components/Header';
-import { KPIGrid } from '../../../components/KPIGrid';
-import { FacturasTable } from '../../../components/FacturasTable';
+import { Box, Typography } from '@mui/material';
+import { Header } from '../../../components/ui/Header';
+import { KPIGrid } from '../../../components/ui/KPIGrid';
+import { FacturasTable } from '../../../components/ui/FacturasTable';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
 import { useInvoiceData } from '../../../hooks/useInvoiceData';
 import { sanitizeErrorMessage } from '../../../utils/api';
-import { Button } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import { SPACING, PAGE_LAYOUT, BUTTON_HEIGHTS, BORDER_RADIUS, TABLE_STYLES, COLORS } from '../../styles/designTokens';
+import { BaseButton, BaseSection } from '../../../components/ui';
 
 /**
- * Dashboard principal de reportes - Diseño original preservado
+ * Facturas - Vista principal de facturas - Diseño original preservado
  */
 export const ReporteDashboard = () => {
   // Mes por defecto: julio (7) donde están las facturas procesadas
@@ -28,7 +29,9 @@ export const ReporteDashboard = () => {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/invoice-api/api';
       const url = `${apiBaseUrl}/facturas/export/excel?month=${selectedMonth}&year=${selectedYear}`;
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: 'include', // Importante: incluir cookies de sesión
+      });
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -75,19 +78,66 @@ export const ReporteDashboard = () => {
     errorMessage = sanitizeErrorMessage(errorMessage);
     
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-6 lg:p-8">
-        <div className="bg-white rounded-2xl shadow-header p-6 sm:p-8 max-w-md text-center mx-4">
-          <div className="text-6xl mb-4">❌</div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Error de Conexión</h2>
-          <p className="text-lg text-gray-600 mb-4 break-words">{errorMessage}</p>
-          <button
+      <Box
+        sx={{
+          minHeight: '100vh',
+          backgroundColor: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: { xs: 4, sm: 6, lg: 8 },
+        }}
+      >
+        <Box
+          sx={{
+            backgroundColor: '#ffffff',
+            borderRadius: BORDER_RADIUS.xl,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.1)',
+            p: { xs: 3, sm: 4, lg: 4 },
+            maxWidth: '448px',
+            textAlign: 'center',
+            mx: 2,
+          }}
+        >
+          <Typography sx={{ fontSize: '60px', mb: 2 }}>❌</Typography>
+          <Typography
+            variant="h2"
+            sx={{
+              fontSize: { xs: '24px', sm: '30px' },
+              fontWeight: 700,
+              color: COLORS.text.primary,
+              mb: 1,
+            }}
+          >
+            Error de Conexión
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: '18px',
+              color: COLORS.text.secondary,
+              mb: 2,
+              wordBreak: 'break-word',
+            }}
+          >
+            {errorMessage}
+          </Typography>
+          <BaseButton
             onClick={() => window.location.reload()}
-            className="bg-gradient-active text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all text-lg"
+            variant="contained"
+            sx={{
+              backgroundColor: COLORS.primary.main,
+              color: '#ffffff',
+              fontSize: '18px',
+              '&:hover': {
+                backgroundColor: COLORS.primary.dark,
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+              },
+            }}
           >
             Reintentar
-          </button>
-        </div>
-      </div>
+          </BaseButton>
+        </Box>
+      </Box>
     );
   }
 
@@ -100,56 +150,92 @@ export const ReporteDashboard = () => {
         margin: 0,
       }}
     >
-      <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-        <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-          <Box sx={{ mb: 4 }}>
-            <Header 
-              selectedMonth={selectedMonth}
-              selectedYear={selectedYear}
-              onMonthChange={setSelectedMonth}
-              onYearChange={setSelectedYear}
-            />
-          </Box>
-
-          {/* Botón de exportación a Excel */}
-          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              onClick={handleExportExcel}
-              variant="contained"
-              startIcon={<DownloadIcon />}
-              sx={{
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                fontWeight: 600,
-                padding: '10px 20px',
-                borderRadius: '8px',
-                textTransform: 'none',
-                '&:hover': {
-                  backgroundColor: '#059669',
-                },
-              }}
-            >
-              Exportar a Excel
-            </Button>
-          </Box>
+      <Box 
+        sx={{ 
+          p: { xs: 2, sm: 4, md: 6, lg: 8 },
+          backgroundColor: COLORS.background.default,
+        }}
+      >
+        <Box sx={{ px: { xs: 2, md: 4 } }}>
+          {/* Título principal con márgenes reducidos */}
+          <Typography
+            variant="h3"
+            sx={{
+              fontFamily: "'Inter', 'Outfit', sans-serif",
+              fontWeight: 700,
+              fontSize: '2rem',
+              color: COLORS.text.primary,
+              mt: 1.125, // Reducido 25% desde 1.5
+              ml: { xs: 1.125, md: 2.25 }, // Reducido 25% desde 1.5 y 3
+              mb: 3,
+            }}
+          >
+            Facturas
+          </Typography>
 
           {loading ? (
             <LoadingSpinner />
           ) : (
             <>
-              <KPIGrid data={data?.kpis} loading={loading} />
-              <div className="mt-4 sm:mt-6">
+              {/* Grid de KPIs - Justo debajo del título */}
+              <Box sx={{ mt: 2, px: { xs: 2, md: 4 } }}>
+                <KPIGrid data={data?.kpis} loading={loading} />
+              </Box>
+
+              {/* Fila con Botón Exportar (izq) y Selector (der) */}
+              <Box 
+                sx={{ 
+                  display: 'flex', 
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  justifyContent: 'space-between', 
+                  alignItems: { xs: 'stretch', sm: 'center' },
+                  gap: { xs: 2, sm: 3 },
+                  mt: 4,
+                  px: { xs: 2, md: 4 },
+                }}
+              >
+                {/* Botón Exportar a Excel - Izquierda */}
+                <BaseButton
+                  onClick={handleExportExcel}
+                  variant="contained"
+                  startIcon={<DownloadIcon />}
+                  sx={{
+                    backgroundColor: '#10b981',
+                    color: '#ffffff',
+                    alignSelf: { xs: 'stretch', sm: 'flex-start' },
+                    '&:hover': {
+                      backgroundColor: '#059669',
+                    },
+                  }}
+                >
+                  Exportar a Excel
+                </BaseButton>
+
+                {/* Selector de mes/año - Derecha, tamaño reducido */}
+                <Box sx={{ alignSelf: { xs: 'stretch', sm: 'flex-end' } }}>
+                  <Header 
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
+                    onMonthChange={setSelectedMonth}
+                    onYearChange={setSelectedYear}
+                    compact={true}
+                  />
+                </Box>
+              </Box>
+
+              {/* Tabla de facturas */}
+              <BaseSection spacing="default" sx={{ mt: 4, px: { xs: 2, md: 4 } }}>
                 <FacturasTable 
                   facturas={data?.allFacturas} 
                   failedInvoices={data?.failedInvoices}
                   loading={loading}
                   showTabs={false}
                 />
-              </div>
+              </BaseSection>
             </>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
     </Box>
   );
 };

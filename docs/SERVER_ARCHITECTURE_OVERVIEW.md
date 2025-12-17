@@ -1,7 +1,8 @@
 # Arquitectura del Servidor - Visión General
 
-**Última actualización:** 2025-11-13  
+**Última actualización:** 2025-12-11  
 **Servidor:** VPS (82.25.101.32)  
+**Dominio:** alexforge.online  
 **Ubicación de proyectos:** `~/proyectos`
 
 ---
@@ -33,8 +34,10 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 | **Investment Dashboard** | `~/proyectos/investment-dashboard` | `http://82.25.101.32/Investment-portfolio` | Activo | Next.js 15 + FastAPI + Postgres |
 | **Invoice Extractor** | `~/proyectos/invoice-extractor` | `http://82.25.101.32/invoice-dashboard` (frontend)<br>`http://82.25.101.32/invoice-api` (backend) | Activo | FastAPI + React + Postgres |
 | **Bresca Reportes Drive** | `~/proyectos/bresca-reportes-drive-dash` | Por completar: URL externa | Activo | Python + Streamlit + DuckDB |
-| **Command Center** | `~/proyectos/infra/command-center` | `http://82.25.101.32/command-center` | Activo | FastAPI + React |
+| **Command Center** | `~/proyectos/infra/command-center` | `https://alexforge.online/command-center`<br>`http://82.25.101.32/command-center` | Activo | FastAPI + React + Streamlit Dashboard |
 | **Traefik** | `~/proyectos/infra/traefik` | `http://82.25.101.32:8080` (dashboard) | Activo | Reverse Proxy |
+| **Loki** | `bot-trading/infrastructure` | Interno (puerto 3100) | Activo | Log Aggregation |
+| **Promtail** | `bot-trading/infrastructure` | Interno (puerto 9080) | Activo | Log Shipper |
 
 ---
 
@@ -46,8 +49,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Nombre funcional:** Trading Bot con Dashboard de Monitoreo
 - **Ruta interna:** `~/proyectos/bot-trading`
 - **URL externa:**
-  - Dashboard: `http://82.25.101.32/bot`
-  - API: `http://82.25.101.32/api/trading`
+  - Dashboard: `https://alexforge.online/bot` (o `http://82.25.101.32/bot`)
+  - API: `https://alexforge.online/api/trading` (o `http://82.25.101.32/api/trading`)
 - **Estado:** Activo (Preparado para Live Test - 99% completitud)
 
 #### Stack tecnológico
@@ -70,7 +73,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - `scripts/analyze_post_mortem.py` (análisis post-mortem completo)
 - **Base de datos:** PostgreSQL 15 (contenedor `postgres`)
 - **Cache:** Redis 7 (contenedor `redis`)
-- **Monitoreo:** Prometheus + Grafana
+- **Monitoreo:** Prometheus + Grafana + Loki + Promtail
+- **Logging Centralizado:** Loki (agregación) + Promtail (shipper) integrado con Grafana
 - **Exchanges:** CCXT (soporte múltiples exchanges)
 
 #### Componentes y arquitectura
@@ -83,7 +87,9 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Análisis Post-Mortem:** Suite completa de análisis (`analyze_post_mortem.py`) para evaluación post-live test
 - **Scripts de Automatización:** Scripts de limpieza, inicio, checklist diario y análisis automatizados
 - **Prometheus:** Métricas de rendimiento y trading
-- **Grafana:** Dashboards de visualización
+- **Grafana:** Dashboards de visualización (integración con Loki para logs)
+- **Loki:** Sistema de agregación de logs (puerto 3100, interno)
+- **Promtail:** Agente de recolección de logs que envía a Loki (puerto 9080, interno)
 - **Redis:** Cache de datos de mercado y estado de sesión
 - **PostgreSQL:** Almacenamiento de operaciones, historial, configuraciones
 
@@ -96,10 +102,11 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - Prometheus: `9090` (expose only, no public)
   - Grafana: `3000` (expose only, no public)
 - **Reverse Proxy (Traefik):**
-  - Dashboard: `Host(82.25.101.32) && PathPrefix(/bot)` → puerto 8501
-  - API: `Host(82.25.101.32) && PathPrefix(/api/trading)` → puerto 8080
-  - Prometheus: `Host(82.25.101.32) && PathPrefix(/infra)` → puerto 9090
-  - Grafana: `Host(82.25.101.32) && PathPrefix(/grafana)` → puerto 3000
+  - Dashboard: `Host(alexforge.online) && PathPrefix(/bot)` → puerto 8501 (HTTPS con redirección HTTP→HTTPS)
+  - API: `Host(alexforge.online) && PathPrefix(/api/trading)` → puerto 8080 (HTTPS)
+  - Prometheus: `Host(82.25.101.32) && PathPrefix(/infra)` → puerto 9090 (HTTPS)
+  - Grafana: `Host(82.25.101.32) && PathPrefix(/grafana)` → puerto 3000 (HTTPS, integrado con Loki)
+  - Loki y Promtail: Solo internos (no expuestos vía Traefik)
 - **Volúmenes:**
   - `logs/`, `backups/`, `configs/` montados desde el host
   - Datos persistentes: `prometheus_data`, `grafana_data`, `redis_data`, `postgres_data`
@@ -159,8 +166,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Nombre funcional:** Investment Portfolio Dashboard
 - **Ruta interna:** `~/proyectos/investment-dashboard`
 - **URL externa:**
-  - Frontend: `http://82.25.101.32/Investment-portfolio`
-  - Backend API: `http://82.25.101.32/Investment-portfolio-api`
+  - Frontend: `https://alexforge.online/Investment-portfolio` (o `http://82.25.101.32/Investment-portfolio`)
+  - Backend API: `https://alexforge.online/Investment-portfolio-api` (o `http://82.25.101.32/Investment-portfolio-api`)
 - **Estado:** Activo
 
 #### Stack tecnológico
@@ -207,8 +214,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - `investment-backend`: FastAPI en puerto `8000` (expose only)
   - `investment-frontend`: Next.js en puerto `3000` (expose only)
 - **Reverse Proxy (Traefik):**
-  - Frontend: `Host(82.25.101.32) && PathPrefix(/Investment-portfolio)` → puerto 3000
-  - Backend: `Host(82.25.101.32) && PathPrefix(/Investment-portfolio-api)` → puerto 8000
+  - Frontend: `Host(alexforge.online) && PathPrefix(/Investment-portfolio)` → puerto 3000 (HTTPS con redirección HTTP→HTTPS)
+  - Backend: `Host(alexforge.online) && PathPrefix(/Investment-portfolio-api)` → puerto 8000 (HTTPS)
   - Middleware: strip prefix para backend, NO strip para frontend (Next.js maneja basePath)
 - **Variables de entorno:**
   - Frontend: `NEXT_PUBLIC_API_URL=http://82.25.101.32/Investment-portfolio-api`
@@ -265,8 +272,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Nombre funcional:** Invoice Extractor - Sistema de Extracción y Procesamiento de Facturas
 - **Ruta interna:** `~/proyectos/invoice-extractor`
 - **URL externa:**
-  - Frontend: `http://82.25.101.32/invoice-dashboard`
-  - Backend API: `http://82.25.101.32/invoice-api`
+  - Frontend: `https://alexforge.online/invoice-dashboard` (o `http://82.25.101.32/invoice-dashboard`)
+  - Backend API: `https://alexforge.online/invoice-api` (o `http://82.25.101.32/invoice-api`)
 - **Estado:** Activo
 
 #### Stack tecnológico
@@ -314,8 +321,8 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - `invoice-backend`: FastAPI en puerto `8002` (network_mode: host, expuesto directamente)
   - `invoice-frontend`: `serve` sirve build estático en puerto `80` (expose only, modo SPA)
 - **Reverse Proxy (Traefik):**
-  - Frontend: `Host(82.25.101.32) && PathPrefix(/invoice-dashboard)` → puerto 80
-  - Backend: File provider (`config/invoice-api.yml`) → `http://172.17.0.1:8002`
+  - Frontend: `Host(alexforge.online) && PathPrefix(/invoice-dashboard)` → puerto 80 (HTTPS con redirección HTTP→HTTPS)
+  - Backend: File provider (`config/invoice-api.yml`) → `http://172.17.0.1:8002` (HTTP, network_mode: host)
   - Middleware: strip prefix para frontend (elimina `/invoice-dashboard` antes de enviar al container)
   - Configuración: Vite usa `base: '/invoice-dashboard/'` para rutas absolutas compatibles con strip prefix
 - **Base de datos:**
@@ -453,8 +460,9 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 - **Nombre funcional:** Command Center - Panel de Control y Gestión
 - **Ruta interna:** `~/proyectos/infra/command-center`
 - **URL externa:**
-  - Frontend: `http://82.25.101.32/command-center`
-  - Backend API: `http://82.25.101.32/command-center-api`
+  - Frontend: `https://alexforge.online/command-center` (o `http://82.25.101.32/command-center`)
+  - Backend API: `https://alexforge.online/command-center-api` (o `http://82.25.101.32/command-center-api`)
+  - Dashboard Streamlit: (interno, acceso vía backend)
 - **Estado:** Activo
 
 #### Stack tecnológico
@@ -472,12 +480,18 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - API REST bajo `/api/*`
   - Acceso a Docker socket para gestión de contenedores
   - Lectura de logs del trading bot (mejoras en visualización y parsing de logs)
+  - Integración con Loki para consulta de logs centralizados
   - Gestión de docker-compose del trading bot
   - Sistema mejorado de logging y monitoreo de logs
 - **Frontend (React):**
-  - Dashboard de control
-  - Visualización de logs mejorada
+  - Dashboard de control principal
+  - Visualización de logs mejorada con integración a Grafana/Loki
   - Gestión de servicios
+  - Filtros avanzados de logs (por app, componente, nivel, búsqueda)
+- **Dashboard Streamlit:**
+  - Dashboard alternativo en `streamlit_dashboard_modern.py`
+  - Visualización de métricas del servidor
+  - Monitoreo de servicios
 
 #### Ejecución y despliegue
 - **Orquestación:** Docker Compose (`docker-compose.yml`)
@@ -485,9 +499,10 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
   - `command-center-backend`: FastAPI en puerto `8001` (expose only)
   - `command-center-frontend`: Nginx sirve build estático en puerto `80` (expose only)
 - **Reverse Proxy (Traefik):**
-  - Frontend: `Host(82.25.101.32) && PathPrefix(/command-center)` → puerto 80
-  - Backend: `Host(82.25.101.32) && PathPrefix(/command-center-api)` → puerto 8001
+  - Frontend: `Host(alexforge.online) && PathPrefix(/command-center)` → puerto 80 (HTTPS con redirección HTTP→HTTPS)
+  - Backend: `Host(alexforge.online) && PathPrefix(/command-center-api)` → puerto 8001 (HTTPS)
   - Middleware: strip prefix para ambos
+  - Soporte dual: HTTP y HTTPS (redirección automática HTTP→HTTPS)
 - **Volúmenes:**
   - Docker socket: `/var/run/docker.sock` (acceso a Docker)
   - Trading bot path: montado como read-only
@@ -538,12 +553,14 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 #### Stack tecnológico
 - **Software:** Traefik v2.10
 - **Certificados:** Let's Encrypt (ACME TLS Challenge)
+- **Dominio:** alexforge.online (configurado en acme.json)
 - **Providers:** Docker + File
+- **Redirección:** HTTP → HTTPS automática habilitada
 
 #### Componentes y arquitectura
 - **Entry Points:**
-  - HTTP: puerto 80 (sin redirect automático a HTTPS, algunas rutas usan HTTP directamente)
-  - HTTPS: puerto 443 (con TLS)
+  - HTTP: puerto 80 (redirección automática a HTTPS habilitada)
+  - HTTPS: puerto 443 (con TLS, certificados Let's Encrypt para alexforge.online)
   - Dashboard: puerto 8080 (opcional, puede removerse en producción)
 - **Providers:**
   - Docker: auto-discovery de servicios con labels `traefik.enable=true`
@@ -568,25 +585,27 @@ Las aplicaciones se organizan como repositorios independientes dentro de `~/proy
 #### Configuración de rutas
 Todas las aplicaciones se enrutan a través de Traefik con las siguientes reglas:
 
-| Aplicación | Ruta | Entry Point | Strip Prefix |
-|------------|------|-------------|--------------|
-| Trading Bot Dashboard | `/bot` | HTTPS | Sí |
-| Trading Bot API | `/api/trading` | HTTPS | No |
-| Investment Portfolio Frontend | `/Investment-portfolio` | HTTP | No |
-| Investment Portfolio API | `/Investment-portfolio-api` | HTTP | Sí |
-| Invoice Extractor Frontend | `/invoice-dashboard` | HTTP | Sí |
-| Invoice Extractor API | `/invoice-api` | HTTP | Sí |
-| Command Center Frontend | `/command-center` | HTTP | No |
-| Command Center API | `/command-center-api` | HTTP | Sí |
-| Prometheus | `/infra` | HTTPS | Sí |
-| Grafana | `/grafana` | HTTPS | No |
+| Aplicación | Ruta | Entry Point | Dominio | Strip Prefix |
+|------------|------|-------------|---------|--------------|
+| Trading Bot Dashboard | `/bot` | HTTPS | alexforge.online | Sí |
+| Trading Bot API | `/api/trading` | HTTPS | alexforge.online | No |
+| Investment Portfolio Frontend | `/Investment-portfolio` | HTTPS | alexforge.online | No |
+| Investment Portfolio API | `/Investment-portfolio-api` | HTTPS | alexforge.online | Sí |
+| Invoice Extractor Frontend | `/invoice-dashboard` | HTTPS | alexforge.online | Sí |
+| Invoice Extractor API | `/invoice-api` | HTTP | 82.25.101.32 | Sí |
+| Command Center Frontend | `/command-center` | HTTPS | alexforge.online | No |
+| Command Center API | `/command-center-api` | HTTPS | alexforge.online | Sí |
+| Prometheus | `/infra` | HTTPS | 82.25.101.32 | Sí |
+| Grafana | `/grafana` | HTTPS | 82.25.101.32 | No |
 
 #### Mantenimiento y tareas sugeridas
 - Rotación de logs de acceso (`/var/log/traefik/access.log`)
-- Renovación automática de certificados Let's Encrypt (verificar que funcione)
+- Renovación automática de certificados Let's Encrypt para alexforge.online (verificar que funcione)
 - Revisión de configuración de seguridad (dashboard accesible públicamente)
 - Considerar deshabilitar dashboard en producción o proteger con auth
 - Monitoreo de uso de recursos y rate limiting
+- Verificar DNS de alexforge.online apunta a 82.25.101.32
+- Monitorear redirección HTTP→HTTPS funcionando correctamente
 
 ---
 
@@ -597,9 +616,11 @@ Todas las aplicaciones se enrutan a través de Traefik con las siguientes reglas
 - **Función:** Reverse proxy único para todas las aplicaciones
 - **Red compartida:** `traefik-public` (Docker network externa)
 - **Enrutamiento:**
-  - Basado en `Host` y `PathPrefix`
-  - Algunas rutas usan HTTP, otras HTTPS (según configuración de Let's Encrypt)
-  - Let's Encrypt no soporta IPs directamente, por lo que algunas rutas usan HTTP
+  - Basado en `Host` (alexforge.online o 82.25.101.32) y `PathPrefix`
+  - Redirección automática HTTP → HTTPS habilitada
+  - Dominio principal: `alexforge.online` (con certificados Let's Encrypt)
+  - IP estática: `82.25.101.32` (usada como fallback o para servicios internos)
+  - Let's Encrypt configurado para dominio alexforge.online
 
 ### Mapa de puertos
 
@@ -614,6 +635,8 @@ Todas las aplicaciones se enrutan a través de Traefik con las siguientes reglas
 | 8501 | Streamlit Dashboards | Localhost | Trading Bot, Bresca Reportes (systemd) |
 | 3000 | Investment Frontend | Interno (Docker) | Expuesto vía Traefik |
 | 3000 | Grafana | Interno (Docker) | Expuesto vía Traefik |
+| 3100 | Loki | Interno (Docker) | No expuesto, solo interno |
+| 9080 | Promtail | Interno (Docker) | No expuesto, solo interno |
 | 9090 | Prometheus | Interno (Docker) | Expuesto vía Traefik |
 | 5432 | PostgreSQL | Interno (Docker) | No expuesto públicamente |
 | 6379 | Redis | Interno (Docker) | No expuesto públicamente |
@@ -630,8 +653,15 @@ Todas las aplicaciones se enrutan a través de Traefik con las siguientes reglas
 
 - **Command Center:**
   - Accede a Docker socket para gestionar servicios
-  - Lee logs del Trading Bot
+  - Lee logs del Trading Bot (directo y vía Loki)
+  - Integración con Grafana/Loki para visualización de logs
   - Gestiona docker-compose del Trading Bot
+
+- **Loki/Promtail:**
+  - Loki: Agrega logs de todas las aplicaciones (puerto 3100)
+  - Promtail: Recolecta logs de archivos y contenedores, envía a Loki (puerto 9080)
+  - Integración con Grafana para visualización
+  - Volúmenes montados: logs del trading bot, logs de Docker
 
 - **Bresca Reportes:**
   - Completamente independiente (DuckDB local, systemd service)

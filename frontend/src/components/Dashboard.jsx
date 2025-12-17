@@ -122,10 +122,10 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeSection === 'carga-datos' && (
+            {activeSection === 'datos' && (
               <div className="bg-white rounded-2xl shadow-header p-6 sm:p-8">
                 <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
-                  Carga de Datos
+                  Datos
                 </h2>
                 <p className="text-gray-600">
                   Sección de carga de datos en desarrollo...

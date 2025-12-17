@@ -22,14 +22,19 @@ export const Layout = (props) => {
       // Limpiar el path para obtener solo la parte del resource
       const cleanPath = path.replace(/\/invoice-dashboard\/?/, '').replace(/^\//, '');
       
-      if (cleanPath === 'facturas' || path.includes('/facturas')) {
-        setActiveSection('facturas');
+      // if (cleanPath === 'facturas' || path.includes('/facturas')) {
+      //   setActiveSection('facturas');
+      // } else 
+      if (cleanPath === 'proveedores' || path.includes('/proveedores')) {
+        setActiveSection('proveedores');
       } else if (cleanPath === 'pendientes' || path.includes('/pendientes')) {
         setActiveSection('pendientes');
       } else if (cleanPath === 'reportes' || path.includes('/reportes')) {
         setActiveSection('reportes');
-      } else if (cleanPath === 'carga-datos' || path.includes('/carga-datos')) {
-        setActiveSection('carga-datos');
+      } else if (cleanPath === 'datos' || path.includes('/datos')) {
+        setActiveSection('datos');
+      } else if (cleanPath === 'categorias' || path.includes('/categorias')) {
+        setActiveSection('datos'); // Categorías está dentro de Datos
       } else if (cleanPath === 'dashboard' || cleanPath === '' || path.endsWith('/invoice-dashboard/') || path === '/') {
         setActiveSection('dashboard');
       } else {

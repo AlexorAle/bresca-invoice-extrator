@@ -14,6 +14,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@react-oauth/google": "^0.12.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.552.0",
     "ra-data-simple-rest": "^5.13.1",

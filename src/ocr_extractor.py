@@ -16,7 +16,7 @@ import io
 from src.pdf_utils import pdf_to_base64, pdf_to_image
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 # Prompt optimizado para extracción de facturas
 PROMPT_TEMPLATE = """Eres un experto en análisis de facturas. Analiza esta imagen de factura y extrae la información en formato JSON.
@@ -29,7 +29,14 @@ INSTRUCCIONES CRÍTICAS:
    - Es la empresa que vende/presta el servicio (ej: "Energya-VM comercializadora", "CONWAY", etc.)
    - ⚠️ CRÍTICO: Este campo es OBLIGATORIO. Si no lo encuentras, usa null pero la factura será marcada como problemática
 
-2. Busca el NOMBRE DEL CLIENTE (la empresa que RECIBE la factura):
+2. Busca el NIF/CIF/VAT DEL PROVEEDOR (identificación fiscal del proveedor):
+   - Campos como "NIF:", "CIF:", "VAT:", "Tax ID:", "N.I.F.:", "Identificación fiscal:"
+   - Suele estar cerca del nombre del proveedor en el header
+   - Formato típico: letra seguida de 8 dígitos (ej: "B12345678", "A28123456")
+   - NUEVO CAMPO CRÍTICO: Este campo es MUY IMPORTANTE para identificar proveedores únicos
+   - Si no lo encuentras, usa null
+
+3. Busca el NOMBRE DEL CLIENTE (la empresa que RECIBE la factura):
    - Campos como "Cliente:", "Bill to:", "Facturar a:", "Datos cliente"
    - Es la empresa que compra/recibe el servicio (ej: "MANTUA EAGLE SL", etc.)
 
@@ -61,6 +68,7 @@ FORMATO DE RESPUESTA (devuelve SOLO este JSON, sin texto adicional):
 
 {
   "nombre_proveedor": "Nombre exacto del proveedor/emisor de la factura",
+  "proveedor_nif": "B12345678",
   "nombre_cliente": "Nombre exacto del cliente que recibe la factura",
   "importe_total": 1234.56,
   "base_imponible": 1020.30,
@@ -72,6 +80,7 @@ FORMATO DE RESPUESTA (devuelve SOLO este JSON, sin texto adicional):
 
 REGLAS:
 - nombre_proveedor: ⚠️ OBLIGATORIO - Empresa que emite la factura (header/logo). Si no encuentras, usa null
+- proveedor_nif: ⚠️ MUY IMPORTANTE - NIF/CIF/VAT del proveedor. Busca cerca del nombre del proveedor. Si no encuentras, usa null
 - nombre_cliente: Empresa que recibe la factura (opcional, puede ser null)
 - importe_total: Número decimal (usa punto como separador decimal) - OBLIGATORIO
 - base_imponible: Número decimal - Base sin IVA. Si no encuentras, intenta calcular desde importe_total e iva_porcentaje
@@ -93,7 +102,9 @@ class InvoiceExtractor:
         Args:
             api_key: API key de OpenAI (default: desde env)
         """
-        self.client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
+        # Inicializar cliente OpenAI sin proxies para evitar conflictos de versión
+        api_key_value = api_key or os.getenv('OPENAI_API_KEY')
+        self.client = openai.OpenAI(api_key=api_key_value)
         self.model = "gpt-4o-mini"  # Modelo más económico con capacidades de visión
         self.tesseract_cmd = os.getenv('TESSERACT_CMD', '/usr/bin/tesseract')
         self.tesseract_lang = os.getenv('TESSERACT_LANG', 'spa+eng')
@@ -207,7 +218,8 @@ class InvoiceExtractor:
                 if hasattr(response, 'usage'):
                     logger.warning(f"Tokens usados: {response.usage.total_tokens if response.usage else 'N/A'}")
                 return {
-                    'nombre_proveedor': None, 
+                    'nombre_proveedor': None,
+                    'proveedor_nif': None,
                     'nombre_cliente': None, 
                     'importe_total': None,
                     'base_imponible': None,
@@ -251,7 +263,8 @@ class InvoiceExtractor:
                 # Log también como string normal para debugging visual
                 logger.warning(f"Contenido como string: {content_stripped}")
                 return {
-                    'nombre_proveedor': None, 
+                    'nombre_proveedor': None,
+                    'proveedor_nif': None,
                     'nombre_cliente': None, 
                     'importe_total': None,
                     'base_imponible': None,
@@ -287,6 +300,7 @@ class InvoiceExtractor:
             logger.warning(f"Error parseando JSON de OpenAI: {e}")
             return {
                 'nombre_proveedor': None,
+                'proveedor_nif': None,
                 'nombre_cliente': None, 
                 'importe_total': None,
                 'base_imponible': None,
@@ -420,6 +434,7 @@ class InvoiceExtractor:
         """Retornar resultado vacío cuando falla todo"""
         return {
             'nombre_proveedor': None,
+            'proveedor_nif': None,
             'nombre_cliente': None,
             'importe_total': None,
             'base_imponible': None,

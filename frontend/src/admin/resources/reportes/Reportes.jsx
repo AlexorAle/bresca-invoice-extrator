@@ -4,10 +4,12 @@
  */
 import React, { useState, useMemo } from 'react';
 import { Box, Typography, Card, CardContent, CardHeader } from '@mui/material';
+import { SPACING, PAGE_LAYOUT, CARD_STYLES, BORDER_RADIUS } from '../../styles/designTokens';
 import { BarChart3, Users, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useInvoiceData } from '../../../hooks/useInvoiceData';
 import { MONTH_NAMES } from '../../../utils/constants';
+import { AnalisisRentabilidad } from './AnalisisRentabilidad';
 
 /**
  * Tarjeta de reporte individual
@@ -25,7 +27,7 @@ const ReportCard = ({ title, icon: Icon, color, children, yearSelector }) => {
       text: '#ffffff',
     },
     green: {
-      bg: '#10b981', // green-500
+      bg: 'linear-gradient(to right, #10b981, #059669)', // emerald-500 to emerald-600
       light: '#d1fae5', // green-100
       text: '#ffffff',
     },
@@ -36,9 +38,9 @@ const ReportCard = ({ title, icon: Icon, color, children, yearSelector }) => {
   return (
     <Card
       sx={{
-        borderRadius: '16px',
+        borderRadius: BORDER_RADIUS.xl,
         border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+        boxShadow: CARD_STYLES.boxShadow,
         overflow: 'hidden',
         height: '100%',
         display: 'flex',
@@ -47,7 +49,12 @@ const ReportCard = ({ title, icon: Icon, color, children, yearSelector }) => {
     >
       <CardHeader
         sx={{
-          backgroundColor: colors.bg,
+          background: typeof colors.bg === 'string' && colors.bg.includes('linear-gradient') 
+            ? colors.bg 
+            : colors.bg,
+          backgroundColor: typeof colors.bg === 'string' && colors.bg.includes('linear-gradient') 
+            ? undefined 
+            : colors.bg,
           color: colors.text,
           padding: '20px 24px',
           display: 'flex',
@@ -93,7 +100,7 @@ const ReportCard = ({ title, icon: Icon, color, children, yearSelector }) => {
       />
       <CardContent
         sx={{
-          padding: '20px',
+          padding: '16px',
           flex: 1,
           backgroundColor: '#ffffff',
         }}
@@ -531,33 +538,6 @@ const TopProveedores = ({ selectedMonth, selectedYear, onMonthChange, onYearChan
   );
 };
 
-/**
- * Componente de Tendencia Anual - Dejado en blanco por ahora
- */
-const TendenciaAnual = () => {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '200px',
-      }}
-    >
-      <Typography
-        variant="body2"
-        sx={{
-          fontFamily: "'Inter', 'Outfit', sans-serif",
-          color: '#64748b',
-          fontSize: '0.875rem',
-        }}
-      >
-        {/* Dejado en blanco por ahora */}
-      </Typography>
-    </Box>
-  );
-};
 
 /**
  * Página principal de Reportes
@@ -628,19 +608,43 @@ export const Reportes = (props) => {
   }, [allFacturasAnio, selectedYear]);
 
   return (
-    <List {...props} title="Reportes" empty={false} actions={false}>
+    <List 
+      {...props} 
+      title="Reportes" 
+      empty={false} 
+      actions={false}
+      sx={{
+        '& .RaList-main': {
+          backgroundColor: '#f8fafc',
+          paddingTop: 0,
+        },
+        '& .RaList-content': {
+          boxShadow: 'none',
+          borderTop: 'none',
+        },
+        '& .RaList-actions': {
+          display: 'none',
+        },
+      }}
+    >
       <Box
         sx={{
           minHeight: '100vh',
           backgroundColor: '#f9fafb',
           padding: 0,
           margin: 0,
+          '& > *': {
+            borderTop: 'none !important',
+          },
         }}
       >
-        <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-          <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-            {/* Header */}
-            <Box sx={{ mb: 4 }}>
+        <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+          <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
+            {/* Título - PRIORIDAD 1: margin-top: 48px */}
+            <Box sx={{ 
+              mt: PAGE_LAYOUT.titleMarginTop, 
+              mb: SPACING.sm,
+            }}>
               <Typography
                 variant="h3"
                 sx={{
@@ -648,11 +652,15 @@ export const Reportes = (props) => {
                   fontWeight: 700,
                   fontSize: '2rem',
                   color: '#1e293b',
-                  mb: 1,
+                  margin: 0,
                 }}
               >
                 Reportes
               </Typography>
+            </Box>
+
+            {/* Subtítulo - margin-bottom: 32px */}
+            <Box sx={{ mb: PAGE_LAYOUT.sectionSpacing }}>
               <Typography
                 variant="body1"
                 sx={{
@@ -665,7 +673,26 @@ export const Reportes = (props) => {
               </Typography>
             </Box>
 
-            {/* Grid de tarjetas de reportes - 2 columnas en desktop, 1 en mobile */}
+            {/* Análisis de Rentabilidad - Primera sección, ancho completo */}
+            <Box sx={{ mb: PAGE_LAYOUT.gridGapLarge }}>
+              <ReportCard
+                title="Análisis de Rentabilidad"
+                icon={TrendingUp}
+                color="green"
+                yearSelector={
+                  <YearSelector 
+                    selectedYear={selectedYear}
+                    onYearChange={setSelectedYear}
+                  />
+                }
+              >
+                <AnalisisRentabilidad 
+                  selectedYear={selectedYear}
+                />
+              </ReportCard>
+            </Box>
+
+            {/* Grid de tarjetas de reportes - gap: 24px (vertical y horizontal) */}
             <Box
               sx={{
                 display: 'grid',
@@ -675,8 +702,8 @@ export const Reportes = (props) => {
                   md: 'repeat(2, 1fr)',
                   lg: 'repeat(2, 1fr)',
                 },
-                gap: 3,
-                mb: 3,
+                gap: PAGE_LAYOUT.gridGapLarge,
+                mb: PAGE_LAYOUT.gridGapLarge,
               }}
             >
               {/* Pago a Proveedores */}
@@ -737,30 +764,8 @@ export const Reportes = (props) => {
                 )}
               </ReportCard>
             </Box>
-
-            {/* Tendencia Anual - Abajo, ocupando ancho completo */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: '1fr',
-                  md: '1fr',
-                  lg: '1fr',
-                },
-                gap: 3,
-              }}
-            >
-              <ReportCard
-                title="Tendencia Anual"
-                icon={TrendingUp}
-                color="green"
-              >
-                <TendenciaAnual />
-              </ReportCard>
-            </Box>
-          </div>
-        </div>
+          </Box>
+        </Box>
       </Box>
     </List>
   );

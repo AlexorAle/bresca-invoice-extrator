@@ -1,22 +1,33 @@
 #!/bin/bash
 # Script para monitorear Google Drive y procesar nuevos archivos
-# Este script debe ejecutarse periódicamente (cron job)
+# Este script puede ejecutarse desde cron o manualmente
+# ADAPTADO PARA CONTENEDOR DOCKER
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Detectar si estamos en contenedor o en host
+if [ -d "/app" ]; then
+    # Estamos en contenedor Docker
+    PROJECT_DIR="/app"
+    LOG_FILE="/app/logs/monitoreo_drive.log"
+else
+    # Estamos en host
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+    LOG_FILE="$PROJECT_DIR/logs/monitoreo_drive.log"
+    
+    # Activar entorno virtual solo si existe (host)
+    if [ -f "$PROJECT_DIR/venv/bin/activate" ]; then
+        source "$PROJECT_DIR/venv/bin/activate"
+    fi
+fi
 
 cd "$PROJECT_DIR"
-
-# Activar entorno virtual
-source venv/bin/activate
 
 # Configurar PYTHONPATH
 export PYTHONPATH="$PROJECT_DIR:$PYTHONPATH"
 
-# Log file
-LOG_FILE="$PROJECT_DIR/logs/monitoreo_drive.log"
+# Crear directorio de logs
 mkdir -p "$(dirname "$LOG_FILE")"
 
 # Timestamp
@@ -29,7 +40,7 @@ echo "[$TIMESTAMP] Iniciando monitoreo de Google Drive..." >> "$LOG_FILE"
 # 1. Busca todos los PDFs en Drive
 # 2. Compara con BD usando hash_contenido y drive_file_id
 # 3. Solo procesa los nuevos archivos
-python3 scripts/run_ingest_incremental.py >> "$LOG_FILE" 2>&1
+python3 "$PROJECT_DIR/scripts/run_ingest_incremental.py" >> "$LOG_FILE" 2>&1
 
 TIMESTAMP_END=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$TIMESTAMP_END] Monitoreo completado" >> "$LOG_FILE"

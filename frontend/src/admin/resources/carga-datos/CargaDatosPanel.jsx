@@ -238,7 +238,25 @@ export const CargaDatosPanel = (props) => {
 
   if (loading && !stats) {
     return (
-      <List {...props} title="Datos" empty={false} actions={false}>
+      <List 
+        {...props} 
+        title="Datos" 
+        empty={false} 
+        actions={false}
+        sx={{
+          '& .RaList-main': {
+            backgroundColor: '#f8fafc',
+            paddingTop: 0,
+          },
+          '& .RaList-content': {
+            boxShadow: 'none',
+            borderTop: 'none',
+          },
+          '& .RaList-actions': {
+            display: 'none',
+          },
+        }}
+      >
         <Box
           sx={{
             minHeight: '100vh',
@@ -257,17 +275,38 @@ export const CargaDatosPanel = (props) => {
   }
 
   return (
-    <List {...props} title="Datos" empty={false} actions={false}>
+    <List 
+      {...props} 
+      title="Datos" 
+      empty={false} 
+      actions={false}
+      sx={{
+        '& .RaList-main': {
+          backgroundColor: '#f8fafc',
+          paddingTop: 0,
+        },
+        '& .RaList-content': {
+          boxShadow: 'none',
+          borderTop: 'none',
+        },
+        '& .RaList-actions': {
+          display: 'none',
+        },
+      }}
+    >
       <Box
         sx={{
           minHeight: '100vh',
           backgroundColor: '#f9fafb',
           padding: 0,
           margin: 0,
+          '& > *': {
+            borderTop: 'none !important',
+          },
         }}
       >
-        <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-          <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
+        <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+          <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
             {/* Título - PRIORIDAD 1: margin-top: 48px */}
             <Box sx={{ 
               mt: PAGE_LAYOUT.titleMarginTop, 
@@ -314,7 +353,7 @@ export const CargaDatosPanel = (props) => {
             </Box>
 
             {/* Tabs para navegar entre Estadísticas y Categorías */}
-            <Box sx={{ mb: PAGE_LAYOUT.sectionSpacing, borderBottom: 1, borderColor: 'divider' }}>
+            <Box sx={{ mb: PAGE_LAYOUT.sectionSpacing }}>
               <Tabs 
                 value={activeTab} 
                 onChange={(e, newValue) => setActiveTab(newValue)}
@@ -539,8 +578,8 @@ export const CargaDatosPanel = (props) => {
                 <CategoriasList {...props} embedded={true} />
               </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
       </Box>
     </List>
   );

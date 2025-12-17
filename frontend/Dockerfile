@@ -9,7 +9,8 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
-RUN npm ci
+# Instalar dependencias (npm install para permitir actualizaciones)
+RUN npm install
 
 # Build the application
 FROM base AS builder

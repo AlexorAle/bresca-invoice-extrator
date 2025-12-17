@@ -1,13 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Edit, FileText } from 'lucide-react';
 import { sanitizeErrorMessage } from '../utils/api';
+import { ManualInvoiceForm } from './ManualInvoiceForm';
 
 /**
  * Componente para mostrar tabla de todas las facturas del mes y facturas no procesadas
  */
-export function FacturasTable({ facturas = [], failedInvoices = [], loading = false, showTabs = true, showOnlyPendientes = false }) {
+export function FacturasTable({ facturas = [], failedInvoices = [], loading = false, showTabs = true, showOnlyPendientes = false, onRefresh }) {
   const [activeTab, setActiveTab] = useState('todas');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   if (loading) {
     return (
@@ -46,6 +49,31 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
       currency: 'EUR',
       minimumFractionDigits: 2,
     }).format(amount);
+  };
+
+  // Categorizar estado basado en la razón del error
+  const getEstadoFromRazon = (razon) => {
+    if (!razon) return { texto: 'Sin clasificar', color: 'gray' };
+    
+    const razonLower = razon.toLowerCase();
+    
+    // Archivo corrupto
+    if (razonLower.includes('archivo inválido') || razonLower.includes('archivo corrupto') || razonLower.includes('corrupt')) {
+      return { texto: 'Archivo corrupto', color: 'red' };
+    }
+    
+    // Error técnico (BD, constraints, etc.)
+    if (razonLower.includes('checkviolation') || razonLower.includes('error técnico') || razonLower.includes('database') || razonLower.includes('constraint')) {
+      return { texto: 'Error técnico', color: 'gray' };
+    }
+    
+    // Datos faltantes (proveedor no encontrado, etc.)
+    if (razonLower.includes('proveedor') || razonLower.includes('emisor') || razonLower.includes('no encontrado') || razonLower.includes('faltante')) {
+      return { texto: 'Datos faltantes', color: 'gray' };
+    }
+    
+    // Por defecto
+    return { texto: 'Sin clasificar', color: 'gray' };
   };
 
 
@@ -90,19 +118,20 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
     return (
       <button
         onClick={() => handleSort(columnKey)}
-        className="flex items-center justify-center gap-2 hover:text-gray-900 transition-colors mx-auto"
+        className="flex items-center justify-center gap-2 transition-colors mx-auto"
+        style={{ color: '#1e293b' }}
       >
         {children}
         {isActive ? (
           sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-5 h-5" />
+            <ChevronUp className="w-4 h-4" style={{ color: '#3b82f6' }} />
           ) : (
-            <ChevronDown className="w-5 h-5" />
+            <ChevronDown className="w-4 h-4" style={{ color: '#3b82f6' }} />
           )
         ) : (
-          <div className="w-5 h-5 flex flex-col">
-            <ChevronUp className="w-2.5 h-2.5 text-gray-400" />
-            <ChevronDown className="w-2.5 h-2.5 text-gray-400 -mt-1" />
+          <div className="w-4 h-4 flex flex-col">
+            <ChevronUp className="w-2 h-2" style={{ color: '#64748b', opacity: 0.5 }} />
+            <ChevronDown className="w-2 h-2 -mt-1" style={{ color: '#64748b', opacity: 0.5 }} />
           </div>
         )}
       </button>
@@ -134,7 +163,13 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
   }, [failedInvoices]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-header p-5 sm:p-7 ipad:p-9">
+    <div 
+      className="rounded-2xl p-8 overflow-x-auto"
+      style={{
+        backgroundColor: '#ffffff', // Tarjetas/Cards
+        boxShadow: '0 4px 12px rgba(30, 58, 138, 0.08)', // Sombra Cards
+      }}
+    >
       {/* Tabs - Solo mostrar si showTabs es true y no es solo pendientes */}
       {showTabs && !showOnlyPendientes && (
         <div className="flex border-b border-gray-200 mb-4">
@@ -172,26 +207,57 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">FACTURA</th>
-                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">RAZÓN</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 font-semibold text-gray-700" style={{ fontSize: '0.875rem' }}>FACTURA</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold text-gray-700" style={{ fontSize: '0.875rem' }}>ESTADO</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 font-semibold text-gray-700" style={{ fontSize: '0.875rem' }}>RAZÓN</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold text-gray-700" style={{ fontSize: '0.875rem' }}>ACCIONES</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {facturasPendientes.map((invoice, index) => (
-                    <tr
-                      key={index}
-                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-5 px-5 md:px-7 ipad:px-9">
-                        <span className="text-lg font-medium text-gray-900 break-words">{invoice.nombre}</span>
-                      </td>
-                      <td className="py-5 px-5 md:px-7 ipad:px-9">
-                        <span className="text-lg text-gray-600 break-words">
-                          {invoice.razon || 'Sin razón especificada'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {facturasPendientes.map((invoice, index) => {
+                    const estado = getEstadoFromRazon(invoice.razon);
+                    return (
+                      <tr
+                        key={index}
+                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-5 px-5 md:px-7 ipad:px-9">
+                          <div className="flex items-center gap-3">
+                            <FileText size={20} className="text-gray-400 flex-shrink-0" />
+                            <span className="font-medium text-gray-900 break-words" style={{ fontSize: '0.9375rem' }}>{invoice.nombre}</span>
+                          </div>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                              estado.color === 'red'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {estado.texto}
+                          </span>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9">
+                          <span className="text-gray-600 break-words" style={{ fontSize: '0.9375rem' }}>
+                            {invoice.razon || 'Sin razón especificada'}
+                          </span>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedInvoice(invoice);
+                              setIsEditModalOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Editar factura manualmente"
+                          >
+                            <Edit size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -206,35 +272,65 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">PROVEEDOR</th>
-                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>PROVEEDOR</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>
                       <SortButton columnKey="fecha">FECHA</SortButton>
                     </th>
-                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>
                       <SortButton columnKey="total">TOTAL</SortButton>
                     </th>
-                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">ESTADO</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>ESTADO</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedFacturas.map((factura) => (
                     <tr 
-                      key={factura.id} 
-                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                      key={factura.id}
+                      className="border-b border-gray-200 transition-all duration-200"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.04)'; // Fondo Hover Fila
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.08)'; // Sombra Hover Fila
+                        // Cambiar color de texto en hover
+                        const tds = e.currentTarget.querySelectorAll('td');
+                        tds.forEach(td => {
+                          if (td.querySelector('span.w-3') === null) { // No cambiar el badge
+                            td.style.color = '#3b82f6'; // Color Texto Hover
+                          }
+                        });
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ffffff';
+                        e.currentTarget.style.boxShadow = 'none';
+                        // Restaurar color de texto
+                        const tds = e.currentTarget.querySelectorAll('td');
+                        tds.forEach(td => {
+                          if (td.querySelector('span.w-3') === null) { // No cambiar el badge
+                            td.style.color = '#1e293b'; // Texto Principal
+                          }
+                        });
+                      }}
                     >
-                      <td className="py-5 px-5 md:px-7 ipad:px-9">
-                        <div className="text-lg font-medium text-gray-900">
-                          {factura.proveedor_nombre || 'N/A'}
-                        </div>
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 font-medium" style={{ color: '#1e293b', fontSize: '0.9375rem' }}>
+                        {factura.proveedor_nombre || 'N/A'}
                       </td>
-                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center text-lg text-gray-600 whitespace-nowrap">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center whitespace-nowrap" style={{ color: '#1e293b', fontSize: '0.9375rem' }}>
                         {formatDate(factura.fecha_emision)}
                       </td>
-                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center text-lg font-semibold text-gray-900 whitespace-nowrap">
+                      <td className="py-5 px-5 md:px-7 ipad:px-9 text-center font-semibold whitespace-nowrap" style={{ color: '#1e293b', fontSize: '0.9375rem' }}>
                         {formatCurrency(factura.importe_total || 0)}
                       </td>
                       <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
-                        <span className="inline-flex items-center justify-center">
+                        <span 
+                          className="inline-flex items-center justify-center transition-all duration-200"
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.boxShadow = '0 0 6px #2563eb'; // Badge Glow Hover
+                            e.currentTarget.style.transform = 'scale(1.3)'; // Transform Badge
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
                           <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                         </span>
                       </td>
@@ -248,38 +344,135 @@ export function FacturasTable({ facturas = [], failedInvoices = [], loading = fa
       ) : (
         <>
           {facturasPendientes.length === 0 ? (
-            <p className="text-gray-500 text-center py-8 text-lg">No hay facturas pendientes de revisión</p>
+            <p className="text-center py-8 text-lg" style={{ color: '#64748b' }}>No hay facturas pendientes de revisión</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">FACTURA</th>
-                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 text-xl font-semibold text-gray-700">RAZÓN</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>FACTURA</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>ESTADO</th>
+                    <th className="text-left py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>RAZÓN</th>
+                    <th className="text-center py-5 px-5 md:px-7 ipad:px-9 font-semibold" style={{ color: '#1e293b', fontSize: '0.875rem' }}>ACCIONES</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {facturasPendientes.map((invoice, index) => (
-                    <tr
-                      key={index}
-                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-5 px-5 md:px-7 ipad:px-9">
-                        <span className="text-lg font-medium text-gray-900 break-words">{invoice.nombre}</span>
-                      </td>
-                      <td className="py-5 px-5 md:px-7 ipad:px-9">
-                        <span className="text-lg text-gray-600 break-words">
-                          {invoice.razon || 'Sin razón especificada'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {facturasPendientes.map((invoice, index) => {
+                    const estado = getEstadoFromRazon(invoice.razon);
+                    return (
+                      <tr
+                        key={index}
+                        className="border-b border-gray-200 transition-all duration-200"
+                        style={{
+                          transform: 'scale(1)',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.04)'; // Fondo Hover Fila
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.08)'; // Sombra Hover Fila
+                          // Cambiar color de texto en hover
+                          const tds = e.currentTarget.querySelectorAll('td');
+                          tds.forEach(td => {
+                            const badge = td.querySelector('span.inline-flex');
+                            const button = td.querySelector('button');
+                            if (!badge && !button) {
+                              td.style.color = '#3b82f6'; // Color Texto Hover
+                            }
+                          });
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#ffffff';
+                          e.currentTarget.style.boxShadow = 'none';
+                          // Restaurar color de texto
+                          const tds = e.currentTarget.querySelectorAll('td');
+                          tds.forEach(td => {
+                            const badge = td.querySelector('span.inline-flex');
+                            const button = td.querySelector('button');
+                            if (!badge && !button) {
+                              td.style.color = '#1e293b'; // Texto Principal
+                            }
+                          });
+                        }}
+                      >
+                        <td className="py-5 px-5 md:px-7 ipad:px-9 font-medium" style={{ color: '#1e293b', fontSize: '0.9375rem' }}>
+                          <div className="flex items-center gap-3">
+                            <FileText size={20} className="flex-shrink-0" style={{ color: '#64748b' }} />
+                            <span className="break-words">{invoice.nombre}</span>
+                          </div>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-all duration-200"
+                            style={{
+                              backgroundColor: estado.color === 'red' ? '#fee2e2' : '#f1f5f9',
+                              color: estado.color === 'red' ? '#dc2626' : '#475569',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.boxShadow = '0 0 6px #2563eb'; // Badge Glow Hover
+                              e.currentTarget.style.transform = 'scale(1.3)'; // Transform Badge
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.boxShadow = 'none';
+                              e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                          >
+                            {estado.texto}
+                          </span>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9" style={{ color: '#1e293b', fontSize: '0.9375rem' }}>
+                          <span className="break-words">
+                            {invoice.razon || 'Sin razón especificada'}
+                          </span>
+                        </td>
+                        <td className="py-5 px-5 md:px-7 ipad:px-9 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedInvoice(invoice);
+                              setIsEditModalOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center p-2 rounded-lg transition-all duration-200"
+                            style={{ color: '#64748b' }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#3b82f6';
+                              e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = '#64748b';
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                            title="Editar factura manualmente"
+                          >
+                            <Edit size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </>
       )}
+
+      {/* Modal de edición manual */}
+      <ManualInvoiceForm
+        open={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedInvoice(null);
+        }}
+        invoice={selectedInvoice}
+        onSuccess={(response) => {
+          console.log('Factura guardada exitosamente:', response);
+          // Refrescar datos si hay callback
+          if (onRefresh) {
+            onRefresh();
+          } else {
+            // Recargar página si no hay callback
+            window.location.reload();
+          }
+        }}
+      />
     </div>
   );
 }

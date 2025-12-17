@@ -22,7 +22,7 @@ from src.logging_conf import get_logger
 from src.utils.disk_space import check_disk_space
 from filelock import Timeout
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 
 class IncrementalIngestStats:

@@ -4,11 +4,13 @@
  */
 import React from 'react';
 import { List } from 'react-admin';
-import { Box, Typography, Button } from '@mui/material';
-import { FacturasTable } from '../../../components/FacturasTable';
+import { Box, Typography } from '@mui/material';
+import { FacturasTable } from '../../../components/ui/FacturasTable';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
 import { useInvoiceData } from '../../../hooks/useInvoiceData';
 import DownloadIcon from '@mui/icons-material/Download';
+import { SPACING, PAGE_LAYOUT, COLORS } from '../../styles/designTokens';
+import { BaseButton, BaseSection } from '../../../components/ui';
 
 /**
  * Lista de facturas pendientes
@@ -33,9 +35,12 @@ export const ReportePendientes = (props) => {
   const handleExportExcel = async () => {
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/invoice-api/api';
-      const url = `${apiBaseUrl}/facturas/export/excel?month=${selectedMonth}&year=${selectedYear}`;
+      // Usar endpoint específico para facturas pendientes (sin filtro de mes, trae TODAS)
+      const url = `${apiBaseUrl}/facturas/export/excel/pendientes`;
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: 'include', // Importante: incluir cookies de sesión
+      });
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -46,7 +51,7 @@ export const ReportePendientes = (props) => {
       link.href = url_blob;
       
       const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `Facturas_${selectedMonth}_${selectedYear}.xlsx`;
+      let filename = 'Facturas_Pendientes.xlsx';
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
         if (filenameMatch) {
@@ -60,55 +65,79 @@ export const ReportePendientes = (props) => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url_blob);
     } catch (error) {
-      console.error('Error al exportar a Excel:', error);
-      alert('Error al exportar a Excel. Por favor, intente nuevamente.');
+      console.error('Error al exportar facturas pendientes a Excel:', error);
+      alert('Error al exportar facturas pendientes a Excel. Por favor, intente nuevamente.');
     }
   };
 
   return (
-    <List {...props} title="Facturas Pendientes" empty={false} actions={false}>
+    <List 
+      {...props} 
+      title="Facturas Pendientes" 
+      empty={false} 
+      actions={false}
+      sx={{
+        '& .RaList-main': {
+          backgroundColor: '#f8fafc',
+          paddingTop: 0,
+        },
+        '& .RaList-content': {
+          boxShadow: 'none',
+          borderTop: 'none',
+        },
+        '& .RaList-actions': {
+          display: 'none',
+        },
+      }}
+    >
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#f9fafb',
+        backgroundColor: COLORS.background.subtle,
         padding: 0,
         margin: 0,
+        '& > *': {
+          borderTop: 'none !important',
+        },
       }}
     >
-      <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-        <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-          {/* Header */}
-          <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+        <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
+          {/* Header - PRIORIDAD 1: margin-top: 48px, botón alineado a la derecha */}
+          <Box sx={{ 
+            mt: PAGE_LAYOUT.titleMarginTop,
+            mb: PAGE_LAYOUT.sectionSpacing,
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+          }}>
             <Typography
               variant="h3"
               sx={{
                 fontFamily: "'Inter', 'Outfit', sans-serif",
                 fontWeight: 700,
                 fontSize: '2rem',
-                color: '#1e293b',
+                color: COLORS.text.primary,
+                margin: 0,
               }}
             >
               Facturas Pendientes
             </Typography>
             {/* Botón de exportación a Excel */}
-            <Button
+            <BaseButton
               onClick={handleExportExcel}
               variant="contained"
               startIcon={<DownloadIcon />}
               sx={{
                 backgroundColor: '#10b981',
                 color: '#ffffff',
-                fontWeight: 600,
-                padding: '10px 20px',
-                borderRadius: '8px',
-                textTransform: 'none',
                 '&:hover': {
                   backgroundColor: '#059669',
                 },
               }}
             >
               Exportar a Excel
-            </Button>
+            </BaseButton>
           </Box>
 
           {/* Tabla de facturas pendientes */}
@@ -124,8 +153,8 @@ export const ReportePendientes = (props) => {
               onRefresh={handleRefresh}
             />
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
     </Box>
     </List>
   );

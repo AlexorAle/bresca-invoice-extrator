@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, ChevronDown } from 'lucide-react';
+import { Typography, Box } from '@mui/material';
 import { MONTH_NAMES } from '../utils/constants';
+import { PAGE_LAYOUT } from '../admin/styles/designTokens';
 
 export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChange }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,18 +38,35 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
   };
 
   return (
-    <div className="bg-white border-b border-gray-200 rounded-[20px] shadow-header p-1.5 sm:p-2 md:p-3 lg:p-4 mb-2 sm:mb-3 lg:mb-4">
+    <Box sx={{ mb: 4 }}>
       {/* Header con título a la izquierda y selector a la derecha */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
-        {/* Título a la izquierda */}
-        <div className="flex-1">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 break-words">
-            🧾 Dashboard de Facturación
-          </h1>
-        </div>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        alignItems: { xs: 'flex-start', sm: 'center' },
+        justifyContent: 'space-between',
+        gap: { xs: 2, sm: 3 },
+        mt: PAGE_LAYOUT.titleMarginTop,
+        mb: 1,
+      }}>
+        {/* Título a la izquierda - Estilo normalizado igual que Reportes */}
+        <Box sx={{ flex: 1 }}>
+          <Typography
+            variant="h3"
+            sx={{
+              fontFamily: "'Inter', 'Outfit', sans-serif",
+              fontWeight: 700,
+              fontSize: '2rem',
+              color: '#1e293b',
+              margin: 0,
+            }}
+          >
+            Dashboard de Facturación
+          </Typography>
+        </Box>
 
         {/* Componente compacto de selección de mes/año - A la derecha (50% más pequeño) */}
-        <div className="relative" ref={dropdownRef}>
+        <Box sx={{ position: 'relative' }} ref={dropdownRef}>
           {/* Calendario Principal - Compacto y más pequeño (50% del tamaño original) */}
           <div 
             className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg shadow-lg overflow-hidden cursor-pointer w-40 border border-slate-700 transition-all hover:shadow-blue-500/10 hover:shadow-xl"
@@ -78,9 +97,29 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
 
           {/* Dropdown Selector */}
           {isOpen && (
-          <div className="absolute top-full mt-2 right-0 bg-slate-900 rounded-lg shadow-2xl overflow-hidden z-50 border border-slate-700 w-48 animate-[fadeIn_0.3s_ease-out]">
+          <Box sx={{ 
+            position: 'absolute',
+            top: '100%',
+            mt: 2,
+            right: 0,
+            backgroundColor: '#0f172a',
+            borderRadius: '8px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            overflow: 'hidden',
+            zIndex: 50,
+            border: '1px solid #334155',
+            width: '192px',
+          }}>
             {/* Selector de año */}
-            <div className="bg-slate-800 px-4 py-3 flex items-center justify-between border-b border-slate-700">
+            <Box sx={{ 
+              backgroundColor: '#1e293b',
+              px: 2,
+              py: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #334155',
+            }}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -102,7 +141,7 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
               >
                 <ChevronRight size={16} />
               </button>
-            </div>
+            </Box>
 
             {/* Grid de meses */}
             <div className="grid grid-cols-3 gap-2 p-3">
@@ -125,11 +164,11 @@ export function Header({ selectedMonth, selectedYear, onMonthChange, onYearChang
                 </button>
               ))}
             </div>
-          </div>
+          </Box>
         )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 

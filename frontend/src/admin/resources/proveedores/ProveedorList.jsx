@@ -475,8 +475,8 @@ export const ProveedorList = (props) => (
         margin: 0,
       }}
     >
-      <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-        <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
+      <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+        <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
           {/* Título - PRIORIDAD 1: margin-top: 48px */}
           <Box sx={{ mt: PAGE_LAYOUT.titleMarginTop, mb: PAGE_LAYOUT.titleMarginBottom }}>
             <Typography
@@ -605,11 +605,11 @@ export const ProveedorList = (props) => (
                 },
               }}
             />
-          </Datagrid>
-        </div>
-      </div>
-    </Box>
-  </List>
+            </Datagrid>
+          </Box>
+        </Box>
+      </Box>
+    </List>
 );
 
 /**
@@ -631,8 +631,8 @@ export const ProveedorEdit = () => (
         margin: 0,
       }}
     >
-      <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-        <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6" style={{ maxWidth: '800px' }}>
+      <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+        <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 }, maxWidth: '800px' }}>
           {/* Header */}
           <Box sx={{ mb: 4 }}>
             <Typography
@@ -694,8 +694,8 @@ export const ProveedorEdit = () => (
               />
             </SimpleForm>
           </Box>
-        </div>
-      </div>
+        </Box>
+      </Box>
     </Box>
   </Edit>
 );

@@ -1,148 +1,150 @@
 #!/usr/bin/env python3
 """
-Script para probar una sola factura sin Google Drive
+Prueba de extracción y mapeo con una única factura
+Verifica qué devuelve OpenAI y cómo se mapea a la BD
 """
 import sys
 import os
+import json
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent))
 
-from security.secrets import load_env, validate_secrets
-from logging_conf import get_logger
-from db.database import get_database
-from db.repositories import FacturaRepository, EventRepository
-from ocr_extractor import InvoiceExtractor
-from parser_normalizer import create_factura_dto
-from pipeline.validate import validate_business_rules, validate_file_integrity
+from dotenv import load_dotenv
+load_dotenv()
 
-# Cargar entorno
-load_env()
-validate_secrets()
+from src.drive_client import DriveClient
+from src.ocr_extractor import InvoiceExtractor
+from src.parser_normalizer import create_factura_dto
 
-logger = get_logger(__name__)
+print('=== PRUEBA DE EXTRACCIÓN Y MAPEO ===')
+print('')
 
-def test_invoice(pdf_path: str):
-    """Probar procesamiento de una factura"""
+# 1. Obtener una factura de prueba
+client = DriveClient()
+folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+pdfs = client.list_all_pdfs_recursive(folder_id)
+
+if not pdfs:
+    print('❌ No se encontraron PDFs')
+    sys.exit(1)
+
+# Probar con una factura diferente (no la primera)
+# Buscar una que probablemente tenga problemas
+test_file = None
+for pdf in pdfs:
+    # Probar con una factura que no sea la primera
+    if 'MAKRO' not in pdf.get('name', '').upper():
+        test_file = pdf
+        break
+
+if not test_file:
+    test_file = pdfs[0]  # Fallback a la primera
+
+file_name = test_file.get('name')
+file_id = test_file.get('id')
+
+print(f'📄 Factura de prueba: {file_name}')
+print(f'   ID: {file_id}')
+print('')
+
+# 2. Descargar la factura
+print('📥 Descargando factura...')
+try:
+    # download_file devuelve True/False, pero guarda el archivo en temp/
+    # Necesitamos construir la ruta manualmente
+    temp_dir = os.getenv('TEMP_PATH', '/app/temp')
+    os.makedirs(temp_dir, exist_ok=True)
+    local_path = os.path.join(temp_dir, file_name)
     
-    logger.info(f"Probando factura: {pdf_path}")
+    # Descargar el archivo
+    success = client.download_file(file_id, local_path)
+    if not success:
+        print(f'   ❌ Error: La descarga falló')
+        sys.exit(1)
     
-    print("\n" + "="*60)
-    print("🧪 TEST DE FACTURA INDIVIDUAL")
-    print("="*60)
-    print(f"Archivo: {pdf_path}\n")
-    
-    # Validar archivo
-    print("1️⃣  Validando archivo...")
-    if not validate_file_integrity(pdf_path):
-        print("❌ Archivo no válido")
-        return
-    
-    print("✅ Archivo válido")
-    
-    # Extraer datos
-    print("\n2️⃣  Extrayendo datos con OCR...")
-    print("   (Esto puede tomar 30-60 segundos...)")
-    
-    extractor = InvoiceExtractor()
-    raw_data = extractor.extract_invoice_data(pdf_path)
-    
-    print("\n📄 Datos extraídos:")
-    print("-" * 60)
-    import json
-    print(json.dumps(raw_data, indent=2, ensure_ascii=False))
-    print("-" * 60)
-    
-    # Crear DTO
-    print("\n3️⃣  Normalizando datos...")
-    metadata = {
-        'drive_file_id': 'test_manual_' + Path(pdf_path).stem.replace(' ', '_'),
-        'drive_file_name': Path(pdf_path).name,
-        'drive_folder_name': 'test',
-        'extractor': 'ollama' if raw_data.get('confianza') != 'baja' else 'tesseract'
-    }
-    
-    dto = create_factura_dto(raw_data, metadata)
-    
-    print("✅ DTO creado:")
-    print("-" * 60)
-    print(json.dumps(dto, indent=2, ensure_ascii=False, default=str))
-    print("-" * 60)
-    
-    # Validar
-    print("\n4️⃣  Validando reglas de negocio...")
-    if validate_business_rules(dto):
-        print("✅ Validación exitosa")
+    print(f'   Descargada en: {local_path}')
+    if not os.path.exists(local_path):
+        print(f'   ❌ Error: El archivo no existe en: {local_path}')
+        sys.exit(1)
+except Exception as e:
+    print(f'   ❌ Error descargando: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+print('')
+
+# 3. Extraer datos con OpenAI
+print('🔍 Extrayendo datos con OpenAI...')
+extractor = InvoiceExtractor()
+raw_data = extractor.extract_invoice_data(local_path)
+
+print('')
+print('📋 DATOS RAW DEVUELTOS POR OPENAI:')
+print('=' * 60)
+print(json.dumps(raw_data, indent=2, ensure_ascii=False, default=str))
+print('=' * 60)
+print('')
+
+# 4. Verificar campos relacionados con proveedor
+print('🔍 CAMPOS RELACIONADOS CON PROVEEDOR EN RAW DATA:')
+proveedor_fields = ['nombre_proveedor', 'proveedor_text', 'emisor', 'vendedor', 'empresa', 'supplier', 'vendor', 'proveedor', 'nombre_emisor']
+found_fields = {}
+for field in proveedor_fields:
+    if field in raw_data and raw_data[field]:
+        found_fields[field] = raw_data[field]
+        print(f'   ✅ {field}: {raw_data[field]}')
+
+if not found_fields:
+    print('   ❌ No se encontró ningún campo relacionado con proveedor')
+    print('')
+    print('   📋 Todos los campos disponibles en raw_data:')
+    for key in raw_data.keys():
+        print(f'      - {key}')
+print('')
+
+# 5. Crear DTO (mapeo)
+print('🔄 Creando DTO (mapeo a BD)...')
+metadata = {
+    'drive_file_id': file_id,
+    'drive_file_name': file_name,
+    'extractor': 'openai'
+}
+dto = create_factura_dto(raw_data, metadata)
+
+print('')
+print('📋 DTO RESULTANTE (mapeado para BD):')
+print('=' * 60)
+# Mostrar solo campos relevantes
+relevant_fields = ['proveedor_text', 'nombre_cliente', 'fecha_emision', 'importe_total', 'base_imponible', 'impuestos_total', 'iva_porcentaje', 'estado']
+for field in relevant_fields:
+    if field in dto:
+        print(f'   {field}: {dto[field]}')
+print('=' * 60)
+print('')
+
+# 6. Verificar si el proveedor se mapeó correctamente
+proveedor_text = dto.get('proveedor_text')
+if proveedor_text and proveedor_text.strip():
+    print(f'✅ proveedor_text mapeado correctamente: {proveedor_text}')
+    print('')
+    print('✅ La factura SERÁ ACEPTADA')
+else:
+    print('❌ proveedor_text NO se mapeó (será rechazada)')
+    print('')
+    print('🔍 Análisis:')
+    if found_fields:
+        print(f'   OpenAI devolvió: {list(found_fields.keys())[0]} = {list(found_fields.values())[0]}')
+        print(f'   Pero el parser NO lo mapeó a proveedor_text')
+        print('')
+        print('   ⚠️  PROBLEMA: El mapeo no está funcionando correctamente')
     else:
-        print("⚠️  Validación falló - estado: revisar")
-        print(f"   Estado: {dto.get('estado')}")
-        if dto.get('error_msg'):
-            print(f"   Error: {dto.get('error_msg')}")
-    
-    # Guardar en BD
-    print("\n5️⃣  Guardando en base de datos...")
-    db = get_database()
-    repo = FacturaRepository(db)
-    
-    try:
-        factura_id = repo.upsert_factura(dto)
-        print(f"✅ Factura guardada con ID: {factura_id}")
-        
-        # Registrar evento
-        event_repo = EventRepository(db)
-        event_repo.insert_event(
-            dto['drive_file_id'],
-            'test_manual',
-            'INFO',
-            f'Prueba manual exitosa - ID: {factura_id}'
-        )
-        
-        # Mostrar resumen
-        print("\n" + "="*60)
-        print("🎉 ¡PRUEBA COMPLETADA EXITOSAMENTE!")
-        print("="*60)
-        print(f"ID Factura:      {factura_id}")
-        print(f"Proveedor:       {dto.get('proveedor_text', 'N/A')}")
-        print(f"Número:          {dto.get('numero_factura', 'N/A')}")
-        print(f"Fecha:           {dto.get('fecha_emision', 'N/A')}")
-        print(f"Importe:         €{dto.get('importe_total', 0)}")
-        print(f"Confianza:       {dto.get('confianza', 'N/A')}")
-        print(f"Extractor:       {dto.get('extractor', 'N/A')}")
-        print(f"Estado:          {dto.get('estado', 'N/A')}")
-        print("="*60)
-        
-        print("\n💡 Puedes ver la factura en el dashboard:")
-        print("   streamlit run src/dashboard/app.py")
-        print("\n📊 O consultar estadísticas:")
-        print("   python src/main.py --stats")
-        
-    except Exception as e:
-        print(f"\n❌ Error guardando en BD: {e}")
-        logger.error(f"Error en test: {e}", exc_info=True)
-        import traceback
-        traceback.print_exc()
-    
-    finally:
-        db.close()
+        print('   OpenAI NO devolvió ningún campo relacionado con proveedor')
+        print('')
+        print('   ⚠️  PROBLEMA: El prompt de OpenAI no está extrayendo el proveedor')
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("\n❌ Uso incorrecto")
-        print("\nUso:")
-        print(f"   python {Path(__file__).name} <ruta_a_factura.pdf>")
-        print("\nEjemplo:")
-        print(f'   python {Path(__file__).name} temp/mi_factura.pdf')
-        print(f'   python {Path(__file__).name} "temp/Factura template.pdf"')
-        sys.exit(1)
-    
-    pdf_path = sys.argv[1]
-    
-    if not Path(pdf_path).exists():
-        print(f"\n❌ Archivo no encontrado: {pdf_path}")
-        print("\n💡 Verifica que:")
-        print("   1. El archivo existe en la ruta especificada")
-        print("   2. Si el nombre tiene espacios, usa comillas")
-        print(f'\n   Ejemplo: python {Path(__file__).name} "temp/Factura template.pdf"')
-        sys.exit(1)
-    
-    test_invoice(pdf_path)
+# Limpiar archivo temporal
+if os.path.exists(local_path):
+    os.remove(local_path)
+    print('')
+    print('🧹 Archivo temporal eliminado')

@@ -77,6 +77,7 @@ async function fetchAPI(endpoint, options = {}) {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
+      credentials: 'include', // Importante: incluir cookies de sesión
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
@@ -178,6 +179,22 @@ export async function fetchAllFacturas(month, year) {
  */
 export async function fetchDataLoadStats() {
   const response = await fetchAPI('/system/data-load-stats');
+  return response;
+}
+
+/**
+ * Crear o actualizar factura manualmente
+ * @param {Object} facturaData - Datos de la factura a crear/actualizar
+ * @returns {Promise<Object>} Respuesta del servidor
+ */
+export async function createManualInvoice(facturaData) {
+  const response = await fetchAPI('/facturas/manual-create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(facturaData),
+  });
   return response;
 }
 

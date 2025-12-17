@@ -1,7 +1,7 @@
 """
 Modelos SQLAlchemy para las tablas de la base de datos
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Text, ForeignKey, CheckConstraint, DECIMAL, Index, Boolean
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Text, ForeignKey, CheckConstraint, DECIMAL, Index, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -150,4 +150,23 @@ class Categoria(Base):
     __table_args__ = (
         Index('idx_categorias_nombre', 'nombre'),
         Index('idx_categorias_activo', 'activo', postgresql_where=(activo == True)),
+    )
+
+class IngresoMensual(Base):
+    """Tabla de ingresos mensuales para análisis de rentabilidad"""
+    __tablename__ = 'ingresos_mensuales'
+
+    id = Column(Integer, primary_key=True)
+    mes = Column(Integer, nullable=False)
+    año = Column(Integer, nullable=False)
+    monto_ingresos = Column(DECIMAL(18, 2), nullable=False, default=5000.00)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+    actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        CheckConstraint('mes >= 1 AND mes <= 12', name='check_mes_range'),
+        CheckConstraint('año >= 2000 AND año <= 2100', name='check_año_range'),
+        UniqueConstraint('mes', 'año', name='uq_ingresos_mes_año'),
+        Index('idx_ingresos_mensuales_año', 'año'),
+        Index('idx_ingresos_mensuales_mes_año', 'mes', 'año'),
     )

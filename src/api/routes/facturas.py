@@ -593,6 +593,411 @@ def _parse_date_from_filename(filename: str, default_year: int = None) -> Option
 
 
 
+@router.get("/export/excel/pendientes")
+async def export_facturas_pendientes_to_excel(
+    request: Request,
+    repo: FacturaRepository = Depends(get_factura_repository)
+):
+    """
+    Exportar todas las facturas pendientes (con errores o en cuarentena) a un archivo Excel bien formateado.
+    Combina facturas en BD (estado 'error') con archivos en cuarentena (igual que la tabla de Pendientes).
+    """
+    try:
+        import json
+        import os
+        import re
+        from pathlib import Path
+        from datetime import datetime, date
+        from calendar import monthrange
+        
+        # Leer query params opcionales (no obligatorios)
+        query_params = request.query_params
+        month_str = query_params.get('month')
+        year_str = query_params.get('year')
+        
+        month = None
+        year = None
+        
+        if month_str:
+            try:
+                month = int(month_str)
+            except (ValueError, TypeError):
+                pass
+        
+        if year_str:
+            try:
+                year = int(year_str)
+            except (ValueError, TypeError):
+                pass
+        
+        # Calcular rango de fechas si se proporcionaron
+        start_date = None
+        end_date = None
+        if month is not None and year is not None:
+            start_date = date(year, month, 1)
+            _, last_day = monthrange(year, month)
+            end_date = date(year, month, last_day)
+        
+        facturas_data = []
+        processed_names = set()  # Para evitar duplicados (inicializar al principio)
+        
+        logger.info(f"🔍 Iniciando export de facturas pendientes")
+        
+        # 1. Obtener facturas de BD con estado 'error' o 'error_permanente'
+        with repo.db.get_session() as session:
+            from src.db.models import Factura
+            from sqlalchemy import func, or_
+            
+            query = session.query(Factura).filter(
+                or_(
+                    Factura.estado == 'error',
+                    Factura.estado == 'error_permanente'
+                )
+            )
+            
+            # Filtrar por fecha si se proporcionó
+            if start_date and end_date:
+                fecha_filtro = func.coalesce(Factura.fecha_emision, Factura.fecha_recepcion)
+                query = query.filter(
+                    fecha_filtro >= start_date,
+                    fecha_filtro <= end_date
+                )
+            
+            facturas_bd = query.all()
+            
+            for f in facturas_bd:
+                # Filtrar duplicados también en BD
+                nombre = f.drive_file_name or f'factura_{f.id}'
+                if nombre in processed_names:
+                    continue
+                processed_names.add(nombre)
+                
+                facturas_data.append({
+                    'id': f.id,
+                    'nombre_archivo': f.drive_file_name or f'Factura {f.id}',
+                    'proveedor_nombre': f.proveedor_text or 'Sin proveedor',
+                    'categoria': f.drive_folder_name or 'Sin categoría',
+                    'fecha_emision': f.fecha_emision.isoformat() if f.fecha_emision else 'Sin fecha',
+                    'estado': 'BD - Error',
+                    'motivo_error': f.motivo_rechazo if hasattr(f, 'motivo_rechazo') else 'Error en procesamiento',
+                    'impuestos_total': float(f.impuestos_total) if f.impuestos_total else 0.0,
+                    'importe_total': float(f.importe_total) if f.importe_total else 0.0
+                })
+        
+        logger.info(f"📊 Facturas desde BD con error: {len(facturas_bd)} (agregadas: {len(facturas_data)})")
+        
+        # 2. Obtener lista de facturas ya procesadas CORRECTAMENTE en BD (para excluir de cuarentena)
+        processed_in_bd = set()
+        
+        with repo.db.get_session() as session:
+            from src.db.models import Factura
+            # Obtener SOLO las facturas con estado 'procesado' (no las con error)
+            facturas_procesadas = session.query(Factura.drive_file_name).filter(
+                Factura.drive_file_name.isnot(None),
+                Factura.estado == 'procesado'
+            ).all()
+            processed_in_bd = {f[0] for f in facturas_procesadas if f[0]}
+        
+        logger.info(f"📋 Facturas procesadas correctamente en BD: {len(processed_in_bd)}")
+        
+        # 3. Obtener facturas de cuarentena (archivos que fallaron)
+        quarantine_path = Path(os.getenv('QUARANTINE_PATH', 'data/quarantine'))
+        if quarantine_path.exists():
+            # Buscar archivos .meta.json en todas las subcarpetas de cuarentena
+            meta_files = list(quarantine_path.rglob("*.meta.json"))
+            logger.info(f"📁 Archivos .meta.json encontrados en cuarentena: {len(meta_files)}")
+            
+            excluidos_procesados = 0
+            excluidos_duplicados = 0
+            
+            for meta_file in meta_files:
+                try:
+                    # Leer metadata
+                    with open(meta_file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+                    
+                    # Extraer información
+                    file_info = metadata.get('file_info', {})
+                    nombre = (
+                        metadata.get('drive_file_name') or 
+                        file_info.get('name') or 
+                        meta_file.stem.replace('.meta', '')
+                    )
+                    
+                    # FILTRO 1: Omitir si ya fue procesada correctamente en BD
+                    if nombre in processed_in_bd:
+                        excluidos_procesados += 1
+                        continue
+                    
+                    # FILTRO 2: Omitir si ya la agregamos (evitar duplicados)
+                    if nombre in processed_names:
+                        excluidos_duplicados += 1
+                        continue
+                    
+                    processed_names.add(nombre)
+                    
+                    # Extraer fecha de file_info.modifiedTime
+                    fecha_str = 'Sin fecha'
+                    modified_time = file_info.get('modifiedTime')
+                    if modified_time:
+                        try:
+                            # Parsear fecha ISO8601 (ej: "2025-05-02T19:11:42.463Z")
+                            fecha_obj = datetime.fromisoformat(modified_time.replace('Z', '+00:00')).date()
+                            fecha_str = fecha_obj.isoformat()
+                            
+                            # Filtrar por mes/año si se proporcionó
+                            if start_date and end_date:
+                                if not (start_date <= fecha_obj <= end_date):
+                                    continue
+                        except:
+                            pass
+                    
+                    # Extraer motivo del rechazo
+                    motivo = metadata.get('reason', 'Error al procesar archivo')
+                    
+                    # Extraer datos de factura_data si existe
+                    factura_data = metadata.get('factura_data', {})
+                    
+                    # Proveedor: intentar de factura_data, sino derivar del nombre del archivo
+                    proveedor = factura_data.get('proveedor_text')
+                    if not proveedor:
+                        # Intentar derivar del nombre del archivo
+                        # Ejemplo: "Fact MAKRO 1 may 25.pdf" → "MAKRO"
+                        nombre_upper = nombre.upper()
+                        if 'MAKRO' in nombre_upper:
+                            proveedor = 'Makro'
+                        elif 'NEGRINI' in nombre_upper:
+                            proveedor = 'Negrini'
+                        elif 'CONWAY' in nombre_upper:
+                            proveedor = 'Conway'
+                        elif 'REVO' in nombre_upper:
+                            proveedor = 'Revo'
+                        elif 'CAFENTO' in nombre_upper:
+                            proveedor = 'Cafento'
+                        elif 'QUIRON' in nombre_upper or 'QUIRONPREVENCION' in nombre_upper:
+                            proveedor = 'Quirón Prevención'
+                        else:
+                            proveedor = 'Sin proveedor'
+                    
+                    # Categoría: intentar derivar del tipo de documento
+                    categoria = metadata.get('drive_folder_name')
+                    if not categoria:
+                        categoria = file_info.get('folder_name')
+                    if not categoria or categoria in ['review', 'duplicates', 'otros']:
+                        # Intentar derivar del nombre
+                        nombre_lower = nombre.lower()
+                        if any(x in nombre_lower for x in ['luz', 'energia', 'electric']):
+                            categoria = 'Servicios/Luz'
+                        elif any(x in nombre_lower for x in ['agua', 'water']):
+                            categoria = 'Servicios/Agua'
+                        elif any(x in nombre_lower for x in ['telefon', 'internet', 'movil']):
+                            categoria = 'Servicios/Telecomunicaciones'
+                        elif any(x in nombre_lower for x in ['alquiler', 'rent', 'arrendamiento']):
+                            categoria = 'Alquiler'
+                        elif any(x in nombre_lower for x in ['honorarios', 'abogado', 'notaria', 'gestor']):
+                            categoria = 'Servicios Profesionales'
+                        else:
+                            categoria = 'Sin categoría'
+                    
+                    # Importes: parsear si son strings
+                    importe_total = 0.0
+                    impuestos_total = 0.0
+                    
+                    if factura_data.get('importe_total'):
+                        try:
+                            importe_total = float(str(factura_data['importe_total']).replace(',', '.'))
+                        except (ValueError, TypeError):
+                            importe_total = 0.0
+                    
+                    if factura_data.get('impuestos_total'):
+                        try:
+                            impuestos_total = float(str(factura_data['impuestos_total']).replace(',', '.'))
+                        except (ValueError, TypeError):
+                            impuestos_total = 0.0
+                    
+                    # Fecha: usar fecha_emision si existe, sino usar modifiedTime
+                    if not fecha_str or fecha_str == 'Sin fecha':
+                        fecha_emision_meta = factura_data.get('fecha_emision')
+                        if fecha_emision_meta:
+                            try:
+                                fecha_obj_meta = datetime.fromisoformat(fecha_emision_meta).date()
+                                fecha_str = fecha_obj_meta.isoformat()
+                            except:
+                                pass
+                    
+                    facturas_data.append({
+                        'id': 'Cuarentena',
+                        'nombre_archivo': nombre,
+                        'proveedor_nombre': proveedor,
+                        'categoria': categoria,
+                        'fecha_emision': fecha_str,
+                        'estado': 'Cuarentena',
+                        'motivo_error': motivo,
+                        'impuestos_total': impuestos_total,
+                        'importe_total': importe_total
+                    })
+                except Exception as e:
+                    logger.error(f"Error procesando archivo de cuarentena {meta_file}: {e}")
+                    continue
+            
+            logger.info(f"🔍 Resultados de cuarentena: {len(meta_files)} archivos, {excluidos_procesados} excluidos (procesados), {excluidos_duplicados} excluidos (duplicados), {len(facturas_data) - len(facturas_bd)} agregados")
+        
+        logger.info(f"✅ Total facturas pendientes para Excel: {len(facturas_data)}")
+        
+        # Si no hay facturas, devolver Excel con mensaje
+        if not facturas_data:
+            output = BytesIO()
+            
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_empty = pd.DataFrame({
+                    'Mensaje': ['No se encontraron facturas pendientes']
+                })
+                sheet_name = "Facturas Pendientes"
+                df_empty.to_excel(writer, index=False, sheet_name=sheet_name)
+                
+                workbook = writer.book
+                worksheet = writer.sheets[sheet_name]
+                
+                from openpyxl.styles import Font, PatternFill, Alignment
+                
+                cell = worksheet.cell(row=1, column=1)
+                cell.fill = PatternFill(start_color="10B981", end_color="10B981", fill_type="solid")
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                cell = worksheet.cell(row=2, column=1)
+                cell.font = Font(size=12)
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                worksheet.column_dimensions['A'].width = 60
+            
+            output.seek(0)
+            
+            file_name = "Facturas_Pendientes.xlsx"
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={file_name}"}
+            )
+        
+        # LOG TEMPORAL: Ver cuántas facturas se están exportando
+        logger.info(f"📊 EXPORTACIÓN PENDIENTES: Total facturas a exportar: {len(facturas_data)}")
+        
+        # Crear DataFrame y Excel
+        df = pd.DataFrame(facturas_data)
+        
+        # Renombrar columnas
+        df = df.rename(columns={
+            'id': 'ID',
+            'nombre_archivo': 'Nombre Archivo',
+            'proveedor_nombre': 'Proveedor',
+            'categoria': 'Categoría',
+            'fecha_emision': 'Fecha Emisión',
+            'estado': 'Estado',
+            'motivo_error': 'Motivo',
+            'impuestos_total': 'Impuestos',
+            'importe_total': 'Total'
+        })
+        
+        # Ordenar columnas
+        df = df[['ID', 'Nombre Archivo', 'Proveedor', 'Categoría', 'Fecha Emisión', 'Estado', 'Motivo', 'Impuestos', 'Total']]
+        
+        # Crear archivo Excel
+        output = BytesIO()
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            sheet_name = "Facturas Pendientes"
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+            
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            
+            header_fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Encabezados
+            for col_num, value in enumerate(df.columns.values, 1):
+                cell = worksheet.cell(row=1, column=col_num)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border
+            
+            # Datos - aplicar formato SIN modificar valores (pandas ya los escribió)
+            for row_num in range(2, len(df) + 2):
+                for col_num in range(1, len(df.columns) + 1):
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    cell.border = border
+                    
+                    # Aplicar formato de moneda MANTENIENDO el valor existente
+                    if df.columns[col_num - 1] in ['Impuestos', 'Total']:
+                        cell.number_format = '#,##0.00 €'
+                    elif df.columns[col_num - 1] == 'Fecha Emisión':
+                        # Si la fecha es válida, formatearla
+                        if isinstance(cell.value, str) and cell.value != 'Sin fecha':
+                            try:
+                                from datetime import datetime
+                                fecha_obj = datetime.fromisoformat(cell.value)
+                                cell.value = fecha_obj
+                                cell.number_format = 'dd/mm/yyyy'
+                            except:
+                                pass  # Mantener como texto si no se puede parsear
+            
+            # Ajustar anchos
+            for i, col in enumerate(df.columns, 1):
+                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                worksheet.column_dimensions[chr(64 + i)].width = min(max_len, 50)
+            
+            # Fila de totales
+            total_row_num = len(df) + 2
+            total_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+            total_font = Font(bold=True)
+            
+            for col_num in range(1, len(df.columns) + 1):
+                cell = worksheet.cell(row=total_row_num, column=col_num)
+                cell.fill = total_fill
+                cell.font = total_font
+                cell.border = border
+                
+                if df.columns[col_num - 1] == 'Proveedor':
+                    cell.value = f'TOTAL: {len(df)} facturas pendientes'
+                elif df.columns[col_num - 1] == 'Impuestos':
+                    cell.value = df['Impuestos'].sum()
+                    cell.number_format = '#,##0.00 €'
+                elif df.columns[col_num - 1] == 'Total':
+                    cell.value = df['Total'].sum()
+                    cell.number_format = '#,##0.00 €'
+        
+        output.seek(0)
+        
+        file_name = "Facturas_Pendientes.xlsx"
+        
+        return Response(
+            content=output.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={file_name}",
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error al exportar facturas pendientes a Excel: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al exportar facturas pendientes a Excel: {str(e)}")
+
+
 @router.get("/export/excel")
 async def export_facturas_to_excel(
     month: int = Query(..., ge=1, le=12, description="Mes (1-12)"),

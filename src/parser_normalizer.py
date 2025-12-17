@@ -15,7 +15,7 @@ except ImportError:
 from src.logging_conf import get_logger
 from src.utils.hash_generator import generate_content_hash
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 def normalize_date(date_str: str) -> Optional[str]:
     """
@@ -229,15 +229,48 @@ def create_factura_dto(raw_data: dict, metadata: dict) -> dict:
         Diccionario con datos normalizados y validados
     """
     # Usar nombre_proveedor para proveedor_text (CORRECTO: proveedor es quien emite)
-    # Si no existe nombre_proveedor, la factura será marcada como problemática
+    # Mapear múltiples campos posibles que OpenAI podría devolver
     if raw_data.get('nombre_proveedor'):
         raw_data['proveedor_text'] = raw_data['nombre_proveedor']
     elif raw_data.get('proveedor_text'):
         # Ya existe proveedor_text, mantenerlo
         pass
+    elif raw_data.get('emisor'):
+        # OpenAI puede devolver 'emisor' en lugar de 'nombre_proveedor'
+        raw_data['proveedor_text'] = raw_data['emisor']
+    elif raw_data.get('vendedor'):
+        # Algunas facturas usan 'vendedor'
+        raw_data['proveedor_text'] = raw_data['vendedor']
+    elif raw_data.get('empresa'):
+        # Algunas facturas usan 'empresa'
+        raw_data['proveedor_text'] = raw_data['empresa']
+    elif raw_data.get('supplier'):
+        # Campo en inglés
+        raw_data['proveedor_text'] = raw_data['supplier']
+    elif raw_data.get('vendor'):
+        # Campo en inglés alternativo
+        raw_data['proveedor_text'] = raw_data['vendor']
     else:
         # No hay proveedor_text ni nombre_proveedor - será validado después
         raw_data['proveedor_text'] = None
+    
+    # NUEVO: Mapear NIF/CIF del proveedor
+    if raw_data.get('proveedor_nif'):
+        raw_data['proveedor_nif'] = raw_data['proveedor_nif']
+    elif raw_data.get('nif_proveedor'):
+        raw_data['proveedor_nif'] = raw_data['nif_proveedor']
+    elif raw_data.get('cif_proveedor'):
+        raw_data['proveedor_nif'] = raw_data['cif_proveedor']
+    elif raw_data.get('nif'):
+        raw_data['proveedor_nif'] = raw_data['nif']
+    elif raw_data.get('cif'):
+        raw_data['proveedor_nif'] = raw_data['cif']
+    elif raw_data.get('vat_number'):
+        raw_data['proveedor_nif'] = raw_data['vat_number']
+    elif raw_data.get('tax_id'):
+        raw_data['proveedor_nif'] = raw_data['tax_id']
+    else:
+        raw_data['proveedor_nif'] = None
     
     # Normalizar fecha (convertir string ISO a date object)
     fecha_emision = None

@@ -78,8 +78,8 @@ export const CategoriasList = (props) => {
         margin: 0,
       }}
     >
-      <div className={isEmbedded ? '' : 'p-2 sm:p-4 md:p-6 lg:p-8'}>
-        <div className={isEmbedded ? '' : 'mx-auto px-3 sm:px-4 md:px-5 lg:px-6'}>
+      <Box sx={isEmbedded ? {} : { p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
+        <Box sx={isEmbedded ? {} : { mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
           {!isEmbedded && (
             <>
               {/* Título */}
@@ -248,8 +248,8 @@ export const CategoriasList = (props) => {
               )}
             </Box>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
     </Box>
   );
 

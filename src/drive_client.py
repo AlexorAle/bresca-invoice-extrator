@@ -12,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.logging_conf import get_logger
 
-logger = get_logger(__name__, component="backend")
+logger = get_logger(__name__)
 
 class DriveClient:
     """Cliente para interactuar con Google Drive API"""
@@ -306,17 +306,17 @@ class DriveClient:
         
         return files_by_month
     
-    def list_all_pdfs_recursive(self, base_folder_id: str) -> List[dict]:
+    def list_all_pdfs_recursive(self, base_folder_id: str, current_path: str = "") -> List[dict]:
         """
-        Listar TODOS los archivos PDF dentro de todas las carpetas
+        Listar TODOS los archivos PDF dentro de todas las carpetas RECURSIVAMENTE
         (sin depender del nombre de las carpetas)
         
-        Este método busca recursivamente todos los PDFs dentro de la carpeta base,
-        sin importar cómo se llamen las subcarpetas. Ideal para cuando los nombres
-        de carpetas pueden variar o cambiar.
+        Este método busca recursivamente todos los PDFs dentro de la carpeta base
+        y todas sus subcarpetas anidadas, sin importar la profundidad.
         
         Args:
             base_folder_id: ID de la carpeta base en Google Drive
+            current_path: Ruta actual para logging (usado internamente en recursión)
         
         Returns:
             Lista plana de diccionarios con información de todos los PDFs encontrados
@@ -324,9 +324,26 @@ class DriveClient:
         all_pdfs = []
         
         try:
-            logger.info(f"Iniciando búsqueda recursiva de PDFs en carpeta base: {base_folder_id}")
+            if not current_path:
+                logger.info(f"Iniciando búsqueda recursiva de PDFs en carpeta base: {base_folder_id}")
+            else:
+                logger.debug(f"Buscando en: {current_path}")
             
-            # 1. Listar todas las carpetas dentro de la carpeta base
+            # 1. Buscar PDFs directamente en esta carpeta
+            try:
+                pdfs_in_folder = self.list_pdf_files(base_folder_id)
+                for pdf in pdfs_in_folder:
+                    pdf['folder_name'] = current_path if current_path else 'root'
+                    pdf['parent_folder_id'] = base_folder_id
+                all_pdfs.extend(pdfs_in_folder)
+                
+                if pdfs_in_folder:
+                    path_display = current_path if current_path else 'carpeta base'
+                    logger.info(f"{path_display}: {len(pdfs_in_folder)} PDFs encontrados")
+            except Exception as e:
+                logger.warning(f"Error listando PDFs de carpeta {current_path or 'base'}: {e}")
+            
+            # 2. Listar todas las subcarpetas dentro de esta carpeta
             folders_query = f"'{base_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
             
             folders = []
@@ -347,50 +364,35 @@ class DriveClient:
                 if not page_token:
                     break
             
-            logger.info(f"Encontradas {len(folders)} carpetas dentro de la carpeta base")
+            if not current_path:
+                logger.info(f"Encontradas {len(folders)} carpetas en el primer nivel")
             
-            # 2. Para cada carpeta, listar todos los PDFs
+            # 3. Para cada subcarpeta, buscar recursivamente
             for folder in folders:
                 folder_id = folder['id']
                 folder_name = folder['name']
                 
-                try:
-                    # Listar PDFs en esta carpeta
-                    pdfs = self.list_pdf_files(folder_id)
-                    
-                    # Agregar nombre de carpeta a metadatos de cada archivo
-                    for pdf in pdfs:
-                        pdf['folder_name'] = folder_name
-                        pdf['parent_folder_id'] = folder_id
-                    
-                    all_pdfs.extend(pdfs)
-                    
-                    if pdfs:
-                        logger.info(f"Carpeta '{folder_name}': {len(pdfs)} PDFs encontrados")
+                # Construir ruta completa para logging
+                new_path = f"{current_path}/{folder_name}" if current_path else folder_name
                 
+                try:
+                    # Llamada recursiva para buscar en esta subcarpeta
+                    subfolder_pdfs = self.list_all_pdfs_recursive(folder_id, new_path)
+                    
+                    # Agregar PDFs encontrados en subcarpetas
+                    all_pdfs.extend(subfolder_pdfs)
+                    
                 except Exception as e:
-                    logger.warning(f"Error listando PDFs de carpeta '{folder_name}' ({folder_id}): {e}")
+                    logger.warning(f"Error buscando recursivamente en carpeta '{new_path}' ({folder_id}): {e}")
                     continue
             
-            # 3. También buscar PDFs directamente en la carpeta base (si los hay)
-            try:
-                base_pdfs = self.list_pdf_files(base_folder_id)
-                for pdf in base_pdfs:
-                    pdf['folder_name'] = 'root'
-                    pdf['parent_folder_id'] = base_folder_id
-                all_pdfs.extend(base_pdfs)
-                
-                if base_pdfs:
-                    logger.info(f"Carpeta base: {len(base_pdfs)} PDFs encontrados")
-            except Exception as e:
-                logger.warning(f"Error listando PDFs de carpeta base: {e}")
-            
-            logger.info(f"Total de PDFs encontrados: {len(all_pdfs)}")
+            if not current_path:
+                logger.info(f"Total de PDFs encontrados (recursivo): {len(all_pdfs)}")
             
             return all_pdfs
         
         except Exception as e:
-            logger.error(f"Error en búsqueda recursiva de PDFs: {e}", exc_info=True)
+            logger.error(f"Error en búsqueda recursiva de PDFs en {current_path or 'carpeta base'}: {e}", exc_info=True)
             return []
     
     def get_file_metadata(self, file_id: str) -> Optional[dict]:

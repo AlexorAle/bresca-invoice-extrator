@@ -1,51 +1,55 @@
 /**
  * Tema personalizado de Material-UI
- * Mantiene el diseño visual actual del Dashboard
+ * Alineado con design tokens y uso real de componentes
  */
 import { createTheme } from '@mui/material/styles';
+import { BORDER_RADIUS, COLORS } from './styles/designTokens';
 
 export const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#60a5fa', // blue-400
-      light: '#93c5fd', // blue-300
-      dark: '#3b82f6',  // blue-500
+      main: COLORS.primary.main, // blue-400
+      light: COLORS.primary.light, // blue-300
+      dark: COLORS.primary.dark,  // blue-500
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#475569', // slate-600
-      light: '#64748b', // slate-500
-      dark: '#334155',  // slate-700
+      main: COLORS.secondary.main, // slate-600
+      light: COLORS.secondary.light, // slate-500
+      dark: COLORS.secondary.dark,  // slate-700
     },
     background: {
-      default: '#f8fafc', // slate-50
-      paper: '#ffffff',
+      default: COLORS.background.default, // slate-50
+      paper: COLORS.background.paper, // white
     },
     text: {
-      primary: '#1e293b',   // slate-800
-      secondary: '#64748b', // slate-500
+      primary: COLORS.text.primary,   // slate-800
+      secondary: COLORS.text.secondary, // slate-500
     },
     error: {
-      main: '#ef4444', // red-500
+      main: COLORS.error.main, // red-500
+      light: COLORS.error.light, // red-100
+      dark: COLORS.error.dark, // red-800
     },
     success: {
-      main: '#10b981', // green-500
+      main: COLORS.success.main, // green-500
+      light: COLORS.success.light, // green-100
+      dark: COLORS.success.dark, // green-800
     },
     warning: {
-      main: '#f59e0b', // amber-500
+      main: COLORS.warning.main, // purple-500
+      light: COLORS.warning.light, // purple-100
+      dark: COLORS.warning.dark, // purple-800
+    },
+    info: {
+      main: COLORS.info.main, // blue-500
+      light: COLORS.info.light, // blue-100
+      dark: COLORS.info.dark, // blue-800
     },
   },
   typography: {
-    fontFamily: [
-      '-apple-system',
-      'BlinkMacSystemFont',
-      '"Segoe UI"',
-      'Roboto',
-      '"Helvetica Neue"',
-      'Arial',
-      'sans-serif',
-    ].join(','),
+    fontFamily: "'Inter', 'Outfit', sans-serif",
     h1: {
       fontSize: '2.5rem', // text-4xl
       fontWeight: 700,
@@ -57,9 +61,9 @@ export const theme = createTheme({
       lineHeight: 1.3,
     },
     h3: {
-      fontSize: '1.5rem', // text-2xl
-      fontWeight: 600,
-      lineHeight: 1.4,
+      fontSize: '2rem', // Ajustado para coincidir con uso real (títulos principales)
+      fontWeight: 700,
+      lineHeight: 1.2,
     },
     h4: {
       fontSize: '1.25rem', // text-xl
@@ -76,24 +80,27 @@ export const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 20, // rounded-[20px]
+    borderRadius: 12, // Cambiado de 20 → 12px para coincidir con BORDER_RADIUS.xl
   },
   components: {
     MuiCard: {
+      defaultProps: {
+        elevation: 0,
+      },
       styleOverrides: {
         root: {
-          borderRadius: '20px',
+          borderRadius: BORDER_RADIUS.xl, // '12px'
+          border: `1px solid ${COLORS.border.default}`, // '#e5e7eb'
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #e2e8f0', // border-gray-200
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: '8px',
+          borderRadius: BORDER_RADIUS.md, // '6px'
           textTransform: 'none',
-          fontWeight: 600,
+          fontWeight: 500,
           padding: '8px 16px',
         },
         contained: {
@@ -108,7 +115,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: '8px',
+            borderRadius: BORDER_RADIUS.md, // '6px'
           },
         },
       },
@@ -116,7 +123,34 @@ export const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: '20px',
+          borderRadius: BORDER_RADIUS.xl, // '12px'
+          '&.RaList-content': {
+            borderTop: 'none !important',
+            boxShadow: 'none !important',
+            border: 'none !important',
+          },
+          // Eliminar cualquier border-top en Papers dentro de List
+          '.RaList-main &': {
+            borderTop: 'none !important',
+          },
+        },
+      },
+    },
+    MuiList: {
+      styleOverrides: {
+        root: {
+          '& .RaList-content': {
+            borderTop: 'none !important',
+            boxShadow: 'none !important',
+            border: 'none !important',
+          },
+          '& .RaList-main': {
+            paddingTop: '0 !important',
+            borderTop: 'none !important',
+          },
+          '& .RaList-actions': {
+            borderTop: 'none !important',
+          },
         },
       },
     },

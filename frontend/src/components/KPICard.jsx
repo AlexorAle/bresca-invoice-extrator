@@ -10,7 +10,8 @@ export const KPICard = React.memo(({
   background,
   bgColor = 'bg-white', // Color de fondo de la tarjeta
   textColor = 'text-gray-900', // Color de texto principal
-  type = 'number' // 'number', 'currency', 'percentage'
+  type = 'number', // 'number', 'currency', 'percentage'
+  cardIndex = 0 // Índice de la card (0-3) para asignar color
 }) => {
   // Formatear valor según tipo
   // Si el valor ya es un string (ej: "27/27"), no formatear
@@ -35,21 +36,33 @@ export const KPICard = React.memo(({
     return 'bg-gray-100 text-gray-700';
   };
 
+  // Colores de las cards según índice (Card 1-4)
+  const cardColors = ['#1e3a8a', '#1e40af', '#2563eb', '#3b82f6'];
+
   return (
     <div 
-      className={`${bgColor} border border-gray-200 p-2 sm:p-3 lg:p-4 rounded-lg shadow-card hover:shadow-card-hover transform hover:-translate-y-1 transition-all duration-300 relative overflow-hidden`}
+      className="rounded-2xl p-6 transition-all duration-300 relative overflow-hidden"
+      style={{
+        backgroundColor: '#ffffff', // Tarjetas/Cards
+        boxShadow: '0 2px 8px rgba(30, 58, 138, 0.12)', // Sombra Normal
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 8px 20px rgba(30, 58, 138, 0.25), 0 0 0 2px rgba(37, 99, 235, 0.1)';
+        e.currentTarget.style.transform = 'translateY(-4px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(30, 58, 138, 0.12)';
+        e.currentTarget.style.transform = 'translateY(0)';
+      }}
       role="region"
       aria-label={`KPI de ${label}`}
     >
-      {/* Barra superior de gradiente */}
-      <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-active" />
-      
       {/* Layout horizontal: Icono izquierda, Info derecha */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-4">
         {/* Ícono a la izquierda */}
         <div 
-          className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center text-lg sm:text-xl lg:text-2xl flex-shrink-0"
-          style={{ backgroundColor: background }}
+          className="text-[28px] flex-shrink-0"
+          style={{ color: cardColors[cardIndex] || cardColors[0] }}
         >
           {icon}
         </div>
@@ -57,12 +70,12 @@ export const KPICard = React.memo(({
         {/* Información a la derecha, centrada verticalmente */}
         <div className="flex-1 flex flex-col justify-center">
           {/* Valor principal */}
-          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${textColor} mb-0.5`}>
+          <div className="text-[28px] font-bold mb-1.5" style={{ color: '#1e293b' }}>
             {formattedValue}
           </div>
 
           {/* Label */}
-          <div className={`text-xs sm:text-sm ${textColor} opacity-80 font-medium`}>
+          <div className="text-[13px] font-light" style={{ color: '#64748b' }}>
             {label}
           </div>
 
@@ -73,7 +86,7 @@ export const KPICard = React.memo(({
                 {getTrendIcon()}
                 {formatPercentage(Math.abs(change))}
               </span>
-              <span className="text-xs text-gray-500">vs anterior</span>
+              <span className="text-xs text-white opacity-70">vs anterior</span>
             </div>
           )}
         </div>
