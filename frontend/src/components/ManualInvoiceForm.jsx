@@ -1,7 +1,7 @@
 /**
  * Componente Modal para edición manual de facturas pendientes
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -13,26 +13,30 @@ import {
   Typography,
   Alert,
   CircularProgress,
+  Autocomplete,
+  ListItemText,
 } from '@mui/material';
 import { X, Save, FileText } from 'lucide-react';
 import { createManualInvoice } from '../utils/api';
+
+// API Base URL (mismo que en otros componentes)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/invoice-api/api';
 
 export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
   const [formData, setFormData] = useState({
     proveedor_text: '',
     fecha_emision: '',
     importe_total: '',
-    base_imponible: '',
     impuestos_total: '',
-    iva_porcentaje: '',
     numero_factura: '',
-    moneda: 'EUR',
   });
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [proveedoresOptions, setProveedoresOptions] = useState([]);
+  const [proveedorLoading, setProveedorLoading] = useState(false);
 
   // Cargar datos de la factura cuando se abre el modal
   useEffect(() => {
@@ -48,11 +52,8 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
         proveedor_text: invoice.proveedor_text || '',
         fecha_emision: fechaFormateada,
         importe_total: invoice.importe_total || '',
-        base_imponible: invoice.base_imponible || '',
         impuestos_total: invoice.impuestos_total || '',
-        iva_porcentaje: invoice.iva_porcentaje || '',
         numero_factura: invoice.numero_factura || '',
-        moneda: invoice.moneda || 'EUR',
       });
 
       setErrors({});
@@ -67,44 +68,87 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
     }
   }, [open, invoice]);
 
-  // Calcular IVA automáticamente si cambian base o impuestos
-  useEffect(() => {
-    if (formData.base_imponible && formData.impuestos_total) {
-      const base = parseFloat(formData.base_imponible) || 0;
-      const impuestos = parseFloat(formData.impuestos_total) || 0;
-      if (base > 0) {
-        const ivaCalculado = ((impuestos / base) * 100).toFixed(2);
-        setFormData(prev => ({
-          ...prev,
-          iva_porcentaje: ivaCalculado,
-        }));
-      }
+  // Autocompletado de proveedores
+  const searchProveedores = useCallback(async (searchTerm) => {
+    if (!searchTerm || searchTerm.length < 2) {
+      setProveedoresOptions([]);
+      return;
     }
-  }, [formData.base_imponible, formData.impuestos_total]);
 
-  // Validar importe total = base + impuestos
+    try {
+      setProveedorLoading(true);
+      // URL correcta: /invoice-api/api/proveedores/autocomplete
+      const url = `${API_BASE_URL}/proveedores/autocomplete?q=${encodeURIComponent(searchTerm)}&limit=10`;
+      console.log('🔍 Buscando proveedores:', url);
+      
+      const response = await fetch(url, { 
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      console.log('📡 Respuesta del servidor:', response.status, response.statusText);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Proveedores encontrados:', data.length, data);
+        setProveedoresOptions(data);
+      } else {
+        console.error('❌ Error en respuesta:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Error detalle:', errorText);
+        setProveedoresOptions([]);
+      }
+    } catch (error) {
+      console.error('❌ Error buscando proveedores:', error);
+      setProveedoresOptions([]);
+    } finally {
+      setProveedorLoading(false);
+    }
+  }, []);
+
+  // Debounce para búsqueda de proveedores
   useEffect(() => {
-    if (formData.base_imponible && formData.impuestos_total && formData.importe_total) {
-      const base = parseFloat(formData.base_imponible) || 0;
+    const searchTerm = formData.proveedor_text?.trim() || '';
+    console.log('⏱️ Debounce effect:', { searchTerm, length: searchTerm.length });
+    
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.length >= 2) {
+        console.log('🚀 Ejecutando búsqueda después de debounce:', searchTerm);
+        searchProveedores(searchTerm);
+      } else {
+        console.log('🧹 Limpiando opciones (menos de 2 caracteres)');
+        setProveedoresOptions([]);
+      }
+    }, 300);
+
+    return () => {
+      console.log('🧹 Limpiando timeout');
+      clearTimeout(timeoutId);
+    };
+  }, [formData.proveedor_text, searchProveedores]);
+
+  // Validar que impuestos no sea mayor que el total
+  useEffect(() => {
+    if (formData.impuestos_total && formData.importe_total) {
       const impuestos = parseFloat(formData.impuestos_total) || 0;
       const total = parseFloat(formData.importe_total) || 0;
-      const expectedTotal = base + impuestos;
-      const diferencia = Math.abs(total - expectedTotal);
-
-      if (diferencia > 0.01) {
+      
+      if (impuestos > total) {
         setErrors(prev => ({
           ...prev,
-          importe_total: `El total debe ser ${expectedTotal.toFixed(2)} (base + impuestos)`,
+          impuestos_total: `Los impuestos no pueden ser mayores que el total (${total.toFixed(2)})`,
         }));
       } else {
         setErrors(prev => {
           const newErrors = { ...prev };
-          delete newErrors.importe_total;
+          delete newErrors.impuestos_total;
           return newErrors;
         });
       }
     }
-  }, [formData.base_imponible, formData.impuestos_total, formData.importe_total]);
+  }, [formData.impuestos_total, formData.importe_total]);
 
   const handleChange = (field) => (event) => {
     const value = event.target.value;
@@ -126,7 +170,8 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.proveedor_text.trim()) {
+    // Validar campos obligatorios
+    if (!formData.proveedor_text || !formData.proveedor_text.trim()) {
       newErrors.proveedor_text = 'El proveedor es obligatorio';
     }
 
@@ -138,12 +183,17 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
       newErrors.importe_total = 'El importe total debe ser mayor que 0';
     }
 
-    if (!formData.base_imponible || parseFloat(formData.base_imponible) <= 0) {
-      newErrors.base_imponible = 'La base imponible debe ser mayor que 0';
-    }
-
-    if (!formData.impuestos_total || parseFloat(formData.impuestos_total) < 0) {
-      newErrors.impuestos_total = 'Los impuestos no pueden ser negativos';
+    if (formData.impuestos_total === '' || formData.impuestos_total === null || formData.impuestos_total === undefined) {
+      newErrors.impuestos_total = 'Los impuestos son obligatorios';
+    } else {
+      const impuestos = parseFloat(formData.impuestos_total) || 0;
+      const total = parseFloat(formData.importe_total) || 0;
+      
+      if (impuestos < 0) {
+        newErrors.impuestos_total = 'Los impuestos no pueden ser negativos';
+      } else if (impuestos > total) {
+        newErrors.impuestos_total = `Los impuestos no pueden ser mayores que el total (${total.toFixed(2)})`;
+      }
     }
 
     setErrors(newErrors);
@@ -164,11 +214,11 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
         proveedor_text: formData.proveedor_text.trim(),
         fecha_emision: formData.fecha_emision,
         importe_total: parseFloat(formData.importe_total),
-        base_imponible: parseFloat(formData.base_imponible),
         impuestos_total: parseFloat(formData.impuestos_total),
-        iva_porcentaje: formData.iva_porcentaje ? parseFloat(formData.iva_porcentaje) : null,
         numero_factura: formData.numero_factura.trim() || null,
-        moneda: formData.moneda,
+        // base_imponible se calcula automáticamente en backend: importe_total - impuestos_total
+        // iva_porcentaje se calcula automáticamente en backend
+        // moneda siempre será EUR, no se envía
       };
 
       const response = await createManualInvoice(facturaData);
@@ -269,15 +319,68 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
 
         {/* Formulario */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {/* Proveedor */}
-          <TextField
-            label="Proveedor *"
-            value={formData.proveedor_text}
-            onChange={handleChange('proveedor_text')}
-            error={!!errors.proveedor_text}
-            helperText={errors.proveedor_text}
-            fullWidth
-            required
+          {/* Proveedor con autocompletado */}
+          <Autocomplete
+            freeSolo
+            options={proveedoresOptions}
+            getOptionLabel={(option) => {
+              if (typeof option === 'string') return option;
+              return option.nombre || '';
+            }}
+            inputValue={formData.proveedor_text}
+            onInputChange={(event, newValue, reason) => {
+              console.log('🔤 onInputChange:', { newValue, reason, event: event?.type });
+              
+              // Actualizar el valor del input siempre
+              setFormData(prev => ({ ...prev, proveedor_text: newValue || '' }));
+              
+              // Limpiar errores
+              if (errors.proveedor_text) {
+                setErrors(prev => {
+                  const newErrors = { ...prev };
+                  delete newErrors.proveedor_text;
+                  return newErrors;
+                });
+              }
+            }}
+            onChange={(event, newValue, reason) => {
+              console.log('✅ onChange:', { newValue, reason });
+              
+              // Cuando se selecciona una opción del dropdown
+              if (newValue && typeof newValue === 'object' && newValue.nombre) {
+                setFormData(prev => ({ ...prev, proveedor_text: newValue.nombre }));
+              } else if (typeof newValue === 'string') {
+                // Si el usuario escribe libremente
+                setFormData(prev => ({ ...prev, proveedor_text: newValue }));
+              } else if (newValue === null) {
+                // Si se limpia el campo
+                setFormData(prev => ({ ...prev, proveedor_text: '' }));
+              }
+            }}
+            loading={proveedorLoading}
+            filterOptions={(options, params) => {
+              // No filtrar en el cliente, usar los resultados del servidor
+              console.log('🔍 filterOptions:', { optionsCount: options.length, inputValue: params.inputValue });
+              return options;
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Proveedor *"
+                error={!!errors.proveedor_text}
+                helperText={errors.proveedor_text || 'Escribe al menos 2 caracteres para buscar proveedores'}
+                required
+              />
+            )}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.id || option.nombre}>
+                <ListItemText
+                  primary={option.nombre}
+                  secondary={option.categoria ? `Categoría: ${option.categoria}` : null}
+                />
+              </Box>
+            )}
+            noOptionsText={proveedorLoading ? 'Buscando...' : 'No se encontraron proveedores'}
           />
 
           {/* Fecha de Emisión */}
@@ -295,82 +398,58 @@ export const ManualInvoiceForm = ({ open, onClose, invoice, onSuccess }) => {
             }}
           />
 
-          {/* Fila: Base Imponible y Impuestos */}
+          {/* Fila: Impuestos Total e Importe Total */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField
-              label="Base Imponible *"
-              type="number"
-              value={formData.base_imponible}
-              onChange={handleChange('base_imponible')}
-              error={!!errors.base_imponible}
-              helperText={errors.base_imponible}
-              fullWidth
-              required
-              inputProps={{ step: '0.01', min: '0' }}
-            />
-
             <TextField
               label="Impuestos Total *"
               type="number"
               value={formData.impuestos_total}
               onChange={handleChange('impuestos_total')}
               error={!!errors.impuestos_total}
-              helperText={errors.impuestos_total}
+              helperText={errors.impuestos_total || 'Total de impuestos (IVA, etc.)'}
               fullWidth
               required
               inputProps={{ step: '0.01', min: '0' }}
             />
-          </Box>
 
-          {/* Fila: Importe Total e IVA % */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <TextField
               label="Importe Total *"
               type="number"
               value={formData.importe_total}
               onChange={handleChange('importe_total')}
               error={!!errors.importe_total}
-              helperText={errors.importe_total || 'Debe ser igual a Base + Impuestos'}
+              helperText={errors.importe_total || 'Total de la factura (incluye impuestos)'}
               fullWidth
               required
               inputProps={{ step: '0.01', min: '0' }}
             />
-
-            <TextField
-              label="IVA %"
-              type="number"
-              value={formData.iva_porcentaje}
-              onChange={handleChange('iva_porcentaje')}
-              fullWidth
-              inputProps={{ step: '0.01', min: '0', max: '100' }}
-              helperText="Se calcula automáticamente"
-            />
           </Box>
+          
+          {/* Información calculada automáticamente */}
+          {formData.importe_total && formData.impuestos_total && (
+            <Box sx={{ p: 2, backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+              <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>
+                Calculado automáticamente:
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#1f2937' }}>
+                Base Imponible: €{((parseFloat(formData.importe_total) || 0) - (parseFloat(formData.impuestos_total) || 0)).toFixed(2)}
+                {((parseFloat(formData.importe_total) || 0) - (parseFloat(formData.impuestos_total) || 0)) > 0 && (
+                  <span style={{ marginLeft: '16px', color: '#6b7280' }}>
+                    IVA: {(((parseFloat(formData.impuestos_total) || 0) / ((parseFloat(formData.importe_total) || 0) - (parseFloat(formData.impuestos_total) || 0))) * 100).toFixed(2)}%
+                  </span>
+                )}
+              </Typography>
+            </Box>
+          )}
 
-          {/* Fila: Número de Factura y Moneda */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField
-              label="Número de Factura"
-              value={formData.numero_factura}
-              onChange={handleChange('numero_factura')}
-              fullWidth
-            />
-
-            <TextField
-              label="Moneda"
-              value={formData.moneda}
-              onChange={handleChange('moneda')}
-              fullWidth
-              select
-              SelectProps={{
-                native: true,
-              }}
-            >
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-              <option value="GBP">GBP</option>
-            </TextField>
-          </Box>
+          {/* Número de Factura (opcional) */}
+          <TextField
+            label="Número de Factura"
+            value={formData.numero_factura}
+            onChange={handleChange('numero_factura')}
+            fullWidth
+            helperText="Opcional - Moneda siempre será EUR"
+          />
         </Box>
       </DialogContent>
 

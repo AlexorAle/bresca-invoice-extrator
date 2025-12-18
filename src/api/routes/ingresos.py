@@ -72,7 +72,8 @@ async def get_rentabilidad(
             .filter(
                 extract('year', Factura.fecha_emision) == year,
                 Factura.importe_total.isnot(None),
-                Factura.estado == 'procesado'
+                Factura.estado == 'procesado',  # Solo facturas procesadas (excluye pendientes)
+                ~Factura.estado.in_(['error', 'revisar', 'pendiente'])  # Excluir explícitamente pendientes
             )
             .group_by(extract('month', Factura.fecha_emision))
         )

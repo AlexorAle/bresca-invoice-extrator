@@ -90,6 +90,9 @@ class Factura(Base):
     # Campo para archivos eliminados de Drive
     deleted_from_drive = Column(Boolean, default=False)
     
+    # Campo para validación manual
+    fecha_validacion = Column(DateTime, nullable=True)
+    
     creado_en = Column(DateTime, default=datetime.utcnow)
     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

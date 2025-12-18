@@ -402,27 +402,29 @@ class FacturaRepository:
             )
             
             total_facturas = facturas_query.count()
-            # Contar exitosas: facturas con importe_total > 0 y estado != 'error'
+            # Contar exitosas: facturas procesadas (excluye pendientes)
             facturas_exitosas = facturas_query.filter(
                 Factura.importe_total.isnot(None),
                 Factura.importe_total > 0,
-                Factura.estado != 'error'
+                Factura.estado == 'procesado'  # Solo procesadas
             ).count()
-            # Contar fallidas: facturas con estado == 'error' o sin importe_total
+            # Contar fallidas: facturas con estado error/revisar/pendiente o sin importe_total
             facturas_fallidas = facturas_query.filter(
-                (Factura.estado == 'error') | (Factura.importe_total.is_(None))
+                (Factura.estado.in_(['error', 'revisar', 'pendiente'])) | (Factura.importe_total.is_(None))
             ).count()
             
             importe_total = session.query(func.sum(Factura.importe_total)).filter(
                 fecha_filtro >= start_date,
                 fecha_filtro <= end_date,
-                Factura.importe_total.isnot(None)
+                Factura.importe_total.isnot(None),
+                Factura.estado == 'procesado'  # Solo procesadas en totales
             ).scalar() or 0.0
             
             promedio_factura = session.query(func.avg(Factura.importe_total)).filter(
                 fecha_filtro >= start_date,
                 fecha_filtro <= end_date,
-                Factura.importe_total.isnot(None)
+                Factura.importe_total.isnot(None),
+                Factura.estado == 'procesado'  # Solo procesadas
             ).scalar() or 0.0
             
             proveedores_activos = session.query(
@@ -486,7 +488,8 @@ class FacturaRepository:
             ).filter(
                 fecha_filtro >= start_date,
                 fecha_filtro <= end_date,
-                (Factura.fecha_emision.isnot(None) | Factura.fecha_recepcion.isnot(None))
+                (Factura.fecha_emision.isnot(None) | Factura.fecha_recepcion.isnot(None)),
+                Factura.estado == 'procesado'  # Solo facturas procesadas
             ).group_by(
                 extract('day', fecha_filtro)
             ).order_by('dia').all()
@@ -528,7 +531,8 @@ class FacturaRepository:
             
             facturas = session.query(Factura).filter(
                 fecha_filtro >= start_date,
-                fecha_filtro <= end_date
+                fecha_filtro <= end_date,
+                Factura.estado == 'procesado'  # Solo facturas procesadas
             ).order_by(
                 fecha_filtro.desc(),
                 Factura.creado_en.desc()
@@ -611,7 +615,8 @@ class FacturaRepository:
             
             facturas = session.query(Factura).filter(
                 fecha_filtro >= start_date,
-                fecha_filtro <= end_date
+                fecha_filtro <= end_date,
+                Factura.estado == 'procesado'  # Solo facturas procesadas
             ).order_by(
                 fecha_filtro.desc(),
                 Factura.creado_en.desc()
@@ -660,6 +665,7 @@ class FacturaRepository:
             ).filter(
                 fecha_filtro >= start_date,
                 fecha_filtro <= end_date,
+                Factura.estado == 'procesado',  # Solo facturas procesadas
                 (Factura.proveedor_id.isnot(None) | Factura.proveedor_text.isnot(None))
             ).group_by(
                 Proveedor.nombre, Factura.proveedor_text

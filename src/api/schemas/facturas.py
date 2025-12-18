@@ -47,42 +47,36 @@ class FacturaByDayResponse(BaseModel):
 class ManualFacturaCreate(BaseModel):
     """Schema para creación manual de factura"""
     drive_file_name: str = Field(..., description="Nombre del archivo (para detección de duplicados)")
-    proveedor_text: str = Field(..., description="Nombre del proveedor")
-    fecha_emision: date = Field(..., description="Fecha de emisión de la factura")
-    importe_total: Decimal = Field(..., description="Importe total de la factura")
-    base_imponible: Decimal = Field(..., description="Base imponible")
-    impuestos_total: Decimal = Field(..., description="Total de impuestos")
-    iva_porcentaje: Optional[Decimal] = Field(None, description="Porcentaje de IVA")
-    numero_factura: Optional[str] = Field(None, description="Número de factura")
-    moneda: Optional[str] = Field('EUR', description="Moneda (default: EUR)")
+    proveedor_text: str = Field(..., description="Nombre del proveedor (obligatorio)")
+    fecha_emision: date = Field(..., description="Fecha de emisión de la factura (obligatorio)")
+    importe_total: Decimal = Field(..., description="Importe total de la factura (obligatorio)")
+    impuestos_total: Decimal = Field(..., description="Total de impuestos (obligatorio)")
+    numero_factura: Optional[str] = Field(None, description="Número de factura (opcional)")
+    # base_imponible se calcula automáticamente: importe_total - impuestos_total
+    # iva_porcentaje se calcula automáticamente si es necesario
+    # moneda siempre será EUR, no se envía desde frontend
 
-    @validator('importe_total', 'base_imponible', 'impuestos_total')
+    @validator('importe_total', 'impuestos_total')
     def validate_positive(cls, v):
         if v <= 0:
             raise ValueError('Debe ser mayor que 0')
         return v
 
-    @validator('iva_porcentaje')
-    def validate_iva(cls, v, values):
-        if v is not None and (v < 0 or v > 100):
-            raise ValueError('El IVA debe estar entre 0 y 100')
-        # Si no se proporciona IVA, calcularlo
-        if v is None and 'base_imponible' in values and 'impuestos_total' in values:
-            base = values.get('base_imponible')
-            impuestos = values.get('impuestos_total')
-            if base and base > 0:
-                calculated_iva = (impuestos / base) * 100
-                return Decimal(str(round(calculated_iva, 2)))
+    @validator('impuestos_total')
+    def validate_impuestos_less_than_total(cls, v, values):
+        """Validar que impuestos no sea mayor que el total"""
+        if 'importe_total' in values:
+            total = values.get('importe_total', 0)
+            if v > total:
+                raise ValueError(f'Los impuestos ({v}) no pueden ser mayores que el importe total ({total})')
         return v
 
     @validator('importe_total')
-    def validate_total_matches(cls, v, values):
-        base = values.get('base_imponible', 0)
+    def validate_total_greater_than_impuestos(cls, v, values):
+        """Validar que el total sea mayor o igual a los impuestos"""
         impuestos = values.get('impuestos_total', 0)
-        expected_total = base + impuestos
-        # Permitir pequeñas diferencias por redondeo (±0.01)
-        if abs(float(v) - float(expected_total)) > 0.01:
-            raise ValueError(f'El importe total ({v}) debe ser igual a base imponible ({base}) + impuestos ({impuestos}) = {expected_total}')
+        if v < impuestos:
+            raise ValueError(f'El importe total ({v}) debe ser mayor o igual a los impuestos ({impuestos})')
         return v
 
     class Config:

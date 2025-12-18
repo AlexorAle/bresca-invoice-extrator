@@ -8,7 +8,7 @@ from src.db.database import Database
 from src.db.models import Proveedor, ProveedorMaestro, Factura
 from sqlalchemy import func, or_
 
-router = APIRouter()
+router = APIRouter(prefix="/proveedores", tags=["proveedores"])
 
 # Schemas
 class ProveedorBase(BaseModel):
@@ -39,7 +39,7 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/proveedores", response_model=List[ProveedorResponse])
+@router.get("", response_model=List[ProveedorResponse])
 async def listar_proveedores(
     letra: Optional[str] = Query(None, description="Filtrar por letra inicial"),
     search: Optional[str] = Query(None, description="Buscar por nombre"),
@@ -97,7 +97,57 @@ async def listar_proveedores(
     
     return proveedores
 
-@router.get("/proveedores/{proveedor_id}", response_model=ProveedorResponse)
+@router.get("/autocomplete", response_model=List[dict])
+async def autocomplete_proveedores(
+    q: str = Query(..., min_length=1, description="Texto de búsqueda"),
+    limit: int = Query(10, ge=1, le=50, description="Límite de resultados"),
+    session = Depends(get_db)
+):
+    """
+    Autocompletado de proveedores maestros
+    Busca en nombre_canonico y nombres_alternativos (JSONB)
+    IMPORTANTE: Esta ruta debe estar ANTES de /{proveedor_id} para evitar conflictos
+    """
+    if not q or len(q.strip()) < 1:
+        return []
+    
+    search_term = q.strip().upper()
+    
+    # Obtener todos los proveedores activos
+    all_proveedores = session.query(ProveedorMaestro).filter(
+        ProveedorMaestro.activo == True
+    ).all()
+    
+    results = []
+    for prov in all_proveedores:
+        # Buscar en nombre_canonico (case insensitive, contiene)
+        nombre_match = False
+        if prov.nombre_canonico:
+            nombre_match = search_term in prov.nombre_canonico.upper()
+        
+        # Buscar en nombres_alternativos (JSONB array)
+        match_in_alternativos = False
+        if prov.nombres_alternativos:
+            for alt in prov.nombres_alternativos:
+                if isinstance(alt, str) and search_term in alt.upper():
+                    match_in_alternativos = True
+                    break
+        
+        # Si hay match en nombre o alternativos, agregar a resultados
+        if nombre_match or match_in_alternativos:
+            results.append({
+                "id": prov.id,
+                "nombre": prov.nombre_canonico,
+                "categoria": prov.categoria,
+                "nif_cif": prov.nif_cif,
+                "match_en_alternativos": match_in_alternativos
+            })
+    
+    # Ordenar por nombre y limitar
+    results.sort(key=lambda x: x['nombre'])
+    return results[:limit]
+
+@router.get("/{proveedor_id}", response_model=ProveedorResponse)
 async def obtener_proveedor(
     proveedor_id: int,
     session = Depends(get_db)

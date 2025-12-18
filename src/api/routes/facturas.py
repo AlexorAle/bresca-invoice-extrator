@@ -1188,21 +1188,44 @@ async def create_manual_invoice(
                 # Si existe y está en error/revisar, actualizar
                 logger.info(f"🔄 Actualizando factura existente (ID: {existing_factura.id}, estado: {existing_factura.estado})")
                 
+                # Buscar o crear proveedor maestro
+                from src.utils.proveedor_finder import normalizar_y_buscar_proveedor
+                try:
+                    resultado_proveedor = normalizar_y_buscar_proveedor(
+                        nombre_raw=factura_data.proveedor_text,
+                        nif=None,
+                        session=session
+                    )
+                    existing_factura.proveedor_maestro_id = resultado_proveedor['proveedor_maestro_id']
+                    logger.info(f"✅ Proveedor maestro asignado: {resultado_proveedor['nombre_canonico']}")
+                except Exception as e:
+                    logger.warning(f"⚠️ No se pudo asignar proveedor maestro: {e}, continuando sin él")
+                
+                # Calcular base_imponible automáticamente: total - impuestos
+                base_imponible_calculada = Decimal(str(factura_data.importe_total)) - Decimal(str(factura_data.impuestos_total))
+                
+                # Calcular IVA automáticamente si base > 0
+                iva_calculado = None
+                if base_imponible_calculada > 0:
+                    iva_calculado = (Decimal(str(factura_data.impuestos_total)) / base_imponible_calculada) * 100
+                    iva_calculado = round(iva_calculado, 2)
+                
                 # Actualizar campos
                 existing_factura.proveedor_text = factura_data.proveedor_text
                 existing_factura.fecha_emision = factura_data.fecha_emision
                 existing_factura.importe_total = Decimal(str(factura_data.importe_total))
-                existing_factura.base_imponible = Decimal(str(factura_data.base_imponible))
+                existing_factura.base_imponible = base_imponible_calculada
                 existing_factura.impuestos_total = Decimal(str(factura_data.impuestos_total))
-                existing_factura.iva_porcentaje = Decimal(str(factura_data.iva_porcentaje)) if factura_data.iva_porcentaje else None
+                existing_factura.iva_porcentaje = iva_calculado
                 existing_factura.numero_factura = factura_data.numero_factura
-                existing_factura.moneda = factura_data.moneda or 'EUR'
-                existing_factura.estado = 'procesado'
+                existing_factura.moneda = 'EUR'  # Siempre EUR
+                existing_factura.estado = 'procesado'  # Cambiar a procesado automáticamente
+                existing_factura.fecha_validacion = datetime.utcnow()  # Registrar fecha de validación
                 existing_factura.error_msg = None  # Limpiar error
                 existing_factura.fecha_recepcion = datetime.utcnow()
                 existing_factura.actualizado_en = datetime.utcnow()
                 existing_factura.extractor = 'manual'
-                existing_factura.confianza = '100'
+                existing_factura.confianza = 'alta'
                 
                 session.commit()
                 session.refresh(existing_factura)
@@ -1224,34 +1247,49 @@ async def create_manual_invoice(
                 hash_name = hashlib.md5(drive_file_name.encode()).hexdigest()[:8]
                 drive_file_id = f"manual_{timestamp}_{hash_name}"
                 
-                # Buscar proveedor por nombre (opcional)
-                proveedor_id = None
+                # Buscar o crear proveedor maestro
+                proveedor_maestro_id = None
                 if factura_data.proveedor_text:
-                    from src.db.models import Proveedor
-                    proveedor = session.query(Proveedor).filter(
-                        func.lower(Proveedor.nombre) == func.lower(factura_data.proveedor_text)
-                    ).first()
-                    if proveedor:
-                        proveedor_id = proveedor.id
+                    from src.utils.proveedor_finder import normalizar_y_buscar_proveedor
+                    try:
+                        resultado_proveedor = normalizar_y_buscar_proveedor(
+                            nombre_raw=factura_data.proveedor_text,
+                            nif=None,
+                            session=session
+                        )
+                        proveedor_maestro_id = resultado_proveedor['proveedor_maestro_id']
+                        logger.info(f"✅ Proveedor maestro asignado: {resultado_proveedor['nombre_canonico']}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ No se pudo asignar proveedor maestro: {e}, continuando sin él")
+                
+                # Calcular base_imponible automáticamente: total - impuestos
+                base_imponible_calculada = Decimal(str(factura_data.importe_total)) - Decimal(str(factura_data.impuestos_total))
+                
+                # Calcular IVA automáticamente si base > 0
+                iva_calculado = None
+                if base_imponible_calculada > 0:
+                    iva_calculado = (Decimal(str(factura_data.impuestos_total)) / base_imponible_calculada) * 100
+                    iva_calculado = round(iva_calculado, 2)
                 
                 # Crear nueva factura
                 nueva_factura = Factura(
                     drive_file_id=drive_file_id,
                     drive_file_name=drive_file_name,
                     drive_folder_name='manual',
-                    proveedor_id=proveedor_id,
+                    proveedor_maestro_id=proveedor_maestro_id,
                     proveedor_text=factura_data.proveedor_text,
                     numero_factura=factura_data.numero_factura,
-                    moneda=factura_data.moneda or 'EUR',
+                    moneda='EUR',  # Siempre EUR
                     fecha_emision=factura_data.fecha_emision,
                     fecha_recepcion=datetime.utcnow(),
-                    base_imponible=Decimal(str(factura_data.base_imponible)),
+                    fecha_validacion=datetime.utcnow(),  # Registrar fecha de validación
+                    base_imponible=base_imponible_calculada,
                     impuestos_total=Decimal(str(factura_data.impuestos_total)),
-                    iva_porcentaje=Decimal(str(factura_data.iva_porcentaje)) if factura_data.iva_porcentaje else None,
+                    iva_porcentaje=iva_calculado,
                     importe_total=Decimal(str(factura_data.importe_total)),
-                    estado='procesado',
+                    estado='procesado',  # Estado procesado automáticamente
                     extractor='manual',
-                    confianza='100',
+                    confianza='alta',
                     revision=1,
                     creado_en=datetime.utcnow(),
                     actualizado_en=datetime.utcnow()
