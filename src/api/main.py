@@ -15,7 +15,7 @@ import uuid
 load_dotenv()
 
 # Importar rutas después de cargar .env
-from src.api.routes import facturas, system, proveedores, categorias, ingresos, auth
+from src.api.routes import facturas, system, proveedores, categorias, ingresos, auth, costos_personal
 from src.logging_conf import get_logger
 
 # Logger
@@ -169,6 +169,7 @@ app.include_router(system.router, prefix="/api")
 app.include_router(proveedores.router, prefix="/api")
 app.include_router(categorias.router, prefix="/api")
 app.include_router(ingresos.router, prefix="/api/ingresos")
+app.include_router(costos_personal.router, prefix="/api/costos-personal")
 
 
 @app.on_event("startup")

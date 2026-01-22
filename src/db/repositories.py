@@ -7,7 +7,7 @@ from calendar import monthrange
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import func, extract
 
-from .models import Factura, Proveedor, IngestEvent, SyncState
+from .models import Factura, Proveedor, IngestEvent, SyncState, CostoPersonal
 from .database import Database
 from src.logging_conf import get_logger
 
@@ -1036,3 +1036,174 @@ class SyncStateRepository:
             ).delete()
             
             logger.debug(f"Estado eliminado: {key}")
+
+
+class CostoPersonalRepository:
+    """Repositorio para operaciones con costos de personal"""
+    
+    def __init__(self, db: Database):
+        self.db = db
+    
+    def get_by_mes_año(self, mes: int, año: int) -> Optional[dict]:
+        """
+        Obtener costo de personal de un mes/año específico
+        
+        Args:
+            mes: Mes (1-12)
+            año: Año (ej: 2025)
+        
+        Returns:
+            Diccionario con datos del costo, o None si no existe
+        """
+        with self.db.get_session() as session:
+            costo = session.query(CostoPersonal).filter(
+                CostoPersonal.mes == mes,
+                CostoPersonal.año == año
+            ).first()
+            
+            if not costo:
+                return None
+            
+            return {
+                'id': costo.id,
+                'mes': costo.mes,
+                'año': costo.año,
+                'sueldos_netos': float(costo.sueldos_netos) if costo.sueldos_netos else 0.0,
+                'coste_empresa': float(costo.coste_empresa) if costo.coste_empresa else 0.0,
+                'total_personal': float(costo.sueldos_netos or 0) + float(costo.coste_empresa or 0),
+                'notas': costo.notas,
+                'creado_en': costo.creado_en.isoformat() if costo.creado_en else None,
+                'actualizado_en': costo.actualizado_en.isoformat() if costo.actualizado_en else None,
+            }
+    
+    def get_all_by_año(self, año: int) -> List[dict]:
+        """
+        Obtener todos los costos de personal de un año
+        
+        Args:
+            año: Año (ej: 2025)
+        
+        Returns:
+            Lista de diccionarios con datos de costos
+        """
+        with self.db.get_session() as session:
+            costos = session.query(CostoPersonal).filter(
+                CostoPersonal.año == año
+            ).order_by(CostoPersonal.mes).all()
+            
+            result = []
+            for costo in costos:
+                result.append({
+                    'id': costo.id,
+                    'mes': costo.mes,
+                    'año': costo.año,
+                    'sueldos_netos': float(costo.sueldos_netos) if costo.sueldos_netos else 0.0,
+                    'coste_empresa': float(costo.coste_empresa) if costo.coste_empresa else 0.0,
+                    'total_personal': float(costo.sueldos_netos or 0) + float(costo.coste_empresa or 0),
+                    'notas': costo.notas,
+                    'creado_en': costo.creado_en.isoformat() if costo.creado_en else None,
+                    'actualizado_en': costo.actualizado_en.isoformat() if costo.actualizado_en else None,
+                })
+            
+            return result
+    
+    def upsert(self, mes: int, año: int, sueldos_netos: float, coste_empresa: float, notas: str = None) -> dict:
+        """
+        Crear o actualizar costo de personal (upsert)
+        
+        Args:
+            mes: Mes (1-12)
+            año: Año
+            sueldos_netos: Total sueldos netos
+            coste_empresa: Total coste empresa (SS)
+            notas: Notas opcionales
+        
+        Returns:
+            Diccionario con datos del costo creado/actualizado
+        """
+        with self.db.get_session() as session:
+            costo = session.query(CostoPersonal).filter(
+                CostoPersonal.mes == mes,
+                CostoPersonal.año == año
+            ).first()
+            
+            if costo:
+                # Actualizar
+                costo.sueldos_netos = sueldos_netos
+                costo.coste_empresa = coste_empresa
+                costo.notas = notas
+                costo.actualizado_en = datetime.utcnow()
+                logger.info(f"Costo personal actualizado: {mes}/{año}")
+            else:
+                # Crear
+                costo = CostoPersonal(
+                    mes=mes,
+                    año=año,
+                    sueldos_netos=sueldos_netos,
+                    coste_empresa=coste_empresa,
+                    notas=notas
+                )
+                session.add(costo)
+                logger.info(f"Costo personal creado: {mes}/{año}")
+            
+            session.flush()
+            
+            return {
+                'id': costo.id,
+                'mes': costo.mes,
+                'año': costo.año,
+                'sueldos_netos': float(costo.sueldos_netos),
+                'coste_empresa': float(costo.coste_empresa),
+                'total_personal': float(costo.sueldos_netos) + float(costo.coste_empresa),
+                'notas': costo.notas,
+                'creado_en': costo.creado_en.isoformat() if costo.creado_en else None,
+                'actualizado_en': costo.actualizado_en.isoformat() if costo.actualizado_en else None,
+            }
+    
+    def delete(self, id: int) -> bool:
+        """
+        Eliminar costo de personal
+        
+        Args:
+            id: ID del costo
+        
+        Returns:
+            True si se eliminó, False si no existía
+        """
+        with self.db.get_session() as session:
+            deleted = session.query(CostoPersonal).filter(
+                CostoPersonal.id == id
+            ).delete()
+            
+            if deleted:
+                logger.info(f"Costo personal eliminado: ID {id}")
+                return True
+            
+            return False
+    
+    def get_total_by_año(self, año: int) -> dict:
+        """
+        Obtener totales de costos de personal de un año
+        
+        Args:
+            año: Año
+        
+        Returns:
+            Diccionario con totales (sueldos_netos, coste_empresa, total_personal)
+        """
+        with self.db.get_session() as session:
+            result = session.query(
+                func.sum(CostoPersonal.sueldos_netos).label('total_sueldos'),
+                func.sum(CostoPersonal.coste_empresa).label('total_coste_empresa')
+            ).filter(
+                CostoPersonal.año == año
+            ).first()
+            
+            total_sueldos = float(result.total_sueldos or 0)
+            total_coste_empresa = float(result.total_coste_empresa or 0)
+            
+            return {
+                'total_sueldos_netos': total_sueldos,
+                'total_coste_empresa': total_coste_empresa,
+                'total_personal': total_sueldos + total_coste_empresa
+            }

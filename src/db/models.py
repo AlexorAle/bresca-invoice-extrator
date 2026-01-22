@@ -173,3 +173,27 @@ class IngresoMensual(Base):
         Index('idx_ingresos_mensuales_año', 'año'),
         Index('idx_ingresos_mensuales_mes_año', 'mes', 'año'),
     )
+
+
+class CostoPersonal(Base):
+    """Tabla de costos de personal mensuales (sueldos netos + coste empresa)"""
+    __tablename__ = 'costos_personal'
+    
+    id = Column(Integer, primary_key=True)
+    mes = Column(Integer, nullable=False)
+    año = Column(Integer, nullable=False)
+    sueldos_netos = Column(DECIMAL(18, 2), nullable=False, default=0.00)
+    coste_empresa = Column(DECIMAL(18, 2), nullable=False, default=0.00)  # Seguros sociales
+    notas = Column(Text, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+    actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        CheckConstraint('mes >= 1 AND mes <= 12', name='check_costo_mes_range'),
+        CheckConstraint('año >= 2000 AND año <= 2100', name='check_costo_año_range'),
+        CheckConstraint('sueldos_netos >= 0', name='check_sueldos_netos_positive'),
+        CheckConstraint('coste_empresa >= 0', name='check_coste_empresa_positive'),
+        UniqueConstraint('mes', 'año', name='uq_costos_personal_mes_año'),
+        Index('idx_costos_personal_año', 'año'),
+        Index('idx_costos_personal_mes_año', 'mes', 'año'),
+    )

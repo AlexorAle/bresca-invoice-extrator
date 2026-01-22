@@ -147,6 +147,38 @@ async def autocomplete_proveedores(
     results.sort(key=lambda x: x['nombre'])
     return results[:limit]
 
+@router.get("/stats/categorias")
+async def estadisticas_categorias(
+    session = Depends(get_db)
+):
+    """
+    Obtener estadísticas por categoría (usando proveedores maestros)
+    IMPORTANTE: Esta ruta debe estar ANTES de /{proveedor_id} para evitar conflictos
+    """
+    from sqlalchemy import select, func
+    
+    query = select(
+        ProveedorMaestro.categoria,
+        func.count(ProveedorMaestro.id).label('total_proveedores')
+    ).where(
+        ProveedorMaestro.activo == True
+    ).group_by(
+        ProveedorMaestro.categoria
+    ).order_by(
+        func.count(ProveedorMaestro.id).desc()
+    )
+    
+    result = session.execute(query)
+    
+    stats = []
+    for row in result:
+        stats.append({
+            'categoria': row.categoria or 'Sin categoría',
+            'total_proveedores': row.total_proveedores
+        })
+    
+    return stats
+
 @router.get("/{proveedor_id}", response_model=ProveedorResponse)
 async def obtener_proveedor(
     proveedor_id: int,
@@ -154,6 +186,7 @@ async def obtener_proveedor(
 ):
     """
     Obtener un proveedor maestro específico con sus estadísticas
+    IMPORTANTE: Esta ruta debe estar DESPUÉS de rutas específicas como /autocomplete y /stats
     """
     proveedor = session.query(ProveedorMaestro).filter(
         ProveedorMaestro.id == proveedor_id,
@@ -173,7 +206,7 @@ async def obtener_proveedor(
         total_importe=float(proveedor.total_importe) if proveedor.total_importe else 0.0
     )
 
-@router.put("/proveedores/{proveedor_id}")
+@router.put("/{proveedor_id}")
 async def actualizar_proveedor(
     proveedor_id: int,
     proveedor_update: ProveedorUpdate,
@@ -200,34 +233,3 @@ async def actualizar_proveedor(
     session.refresh(proveedor)
     
     return {"message": "Proveedor actualizado", "id": proveedor.id}
-
-@router.get("/proveedores/stats/categorias")
-async def estadisticas_categorias(
-    session = Depends(get_db)
-):
-    """
-    Obtener estadísticas por categoría (usando proveedores maestros)
-    """
-    from sqlalchemy import select, func
-    
-    query = select(
-        ProveedorMaestro.categoria,
-        func.count(ProveedorMaestro.id).label('total_proveedores')
-    ).where(
-        ProveedorMaestro.activo == True
-    ).group_by(
-        ProveedorMaestro.categoria
-    ).order_by(
-        func.count(ProveedorMaestro.id).desc()
-    )
-    
-    result = session.execute(query)
-    
-    stats = []
-    for row in result:
-        stats.append({
-            'categoria': row.categoria or 'Sin categoría',
-            'total_proveedores': row.total_proveedores
-        })
-    
-    return stats

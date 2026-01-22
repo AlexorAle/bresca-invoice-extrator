@@ -339,6 +339,14 @@ const CategoriaField = ({ sx = {} }) => {
             open={open}
             onClose={handleClose}
             onClick={(e) => e.stopPropagation()}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
             PaperProps={{
               sx: {
                 mt: 1,

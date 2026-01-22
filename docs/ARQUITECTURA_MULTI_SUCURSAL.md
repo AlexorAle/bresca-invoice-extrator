@@ -1,8 +1,9 @@
 # Arquitectura del Sistema Invoice Extractor - Documentación para Multi-Sucursal
 
-**Fecha:** 2025-12-11  
+**Fecha de creación:** 2025-12-11  
+**Última actualización:** 2026-01-22  
 **Propósito:** Documentación técnica completa del sistema actual para diseñar plan de implementación multi-sucursal  
-**Versión del Sistema:** 1.0.0
+**Versión del Sistema:** 1.1.0 (incluye módulo de Costos de Personal)
 
 ---
 
@@ -15,6 +16,8 @@ Sistema de extracción y gestión automática de facturas que:
 - Almacena en PostgreSQL (`negocio_db`)
 - Proporciona dashboard web (React + React-admin)
 - API REST (FastAPI) para todas las operaciones
+- Gestiona ingresos y costos de personal mensuales
+- Genera análisis de rentabilidad integrado
 
 ### Requerimiento Nuevo
 El cliente abrió una segunda sucursal y necesita:
@@ -84,6 +87,7 @@ Proporcionar toda la información técnica necesaria para diseñar un plan de im
 │  │  - ingest_events (auditoría)                  │           │
 │  │  - sync_state (sincronización)                │           │
 │  │  - ingresos_mensuales (rentabilidad)          │           │
+│  │  - costos_personal (costos mensuales)         │           │
 │  └─────────────────────────────────────────────┘           │
 └────────────────────────┬────────────────────────────────────┘
                          │
@@ -97,6 +101,7 @@ Proporcionar toda la información técnica necesaria para diseñar un plan de im
 │  │  - /api/system/*                            │           │
 │  │  - /api/categorias/*                        │           │
 │  │  - /api/ingresos/*                          │           │
+│  │  - /api/costos-personal/*                   │           │
 │  │  - /api/auth/*                             │           │
 │  └─────────────────────────────────────────────┘           │
 └────────────────────────┬────────────────────────────────────┘
@@ -415,6 +420,48 @@ UNIQUE(mes, año)
 
 ---
 
+#### 8. `costos_personal` (Costos de Personal)
+
+**Propósito:** Costos de personal mensuales para análisis de rentabilidad
+
+```sql
+id              SERIAL PRIMARY KEY
+mes             INTEGER NOT NULL              -- 1-12
+año             INTEGER NOT NULL              -- 2000-2100
+sueldos_netos   DECIMAL(18,2) NOT NULL DEFAULT 0.00
+coste_empresa   DECIMAL(18,2) NOT NULL DEFAULT 0.00  -- Seguros sociales, etc.
+total_personal  DECIMAL(18,2) GENERATED ALWAYS AS (sueldos_netos + coste_empresa) STORED
+notas           TEXT
+creado_en       TIMESTAMP DEFAULT now()
+actualizado_en  TIMESTAMP DEFAULT now()
+
+-- Constraint único
+UNIQUE(mes, año)
+```
+
+**Índices:**
+- `idx_costos_personal_año` (año)
+- `idx_costos_personal_mes_año` (mes, año)
+
+**Constraints:**
+- `check_costo_personal_mes_range`: mes >= 1 AND mes <= 12
+- `check_costo_personal_año_range`: año >= 2000 AND año <= 2100
+- `uq_costos_personal_mes_año`: UNIQUE(mes, año)
+
+**Campo calculado:**
+- `total_personal`: Suma automática de `sueldos_netos` + `coste_empresa` (STORED)
+
+**⚠️ IMPORTANTE PARA MULTI-SUCURSAL:**
+- **NO tiene campo sucursal**
+- **Los costos de personal son globales actualmente**
+- **Necesitará costos de personal por sucursal**
+
+**⚠️ INTEGRACIÓN:**
+- Se integra con el endpoint `/api/ingresos/rentabilidad/{year}` para cálculo de gastos totales
+- Los costos de personal se suman a los gastos de facturas para obtener rentabilidad neta
+
+---
+
 ### Relaciones Entre Tablas
 
 ```
@@ -532,13 +579,71 @@ Desarrollo: http://localhost:8002/api
 | GET | `/ingresos/mensuales/{id}` | Detalle de ingreso mensual | `id` |
 | POST | `/ingresos/mensuales` | Crear ingreso mensual | Body: `IngresoMensualCreate` |
 | PUT | `/ingresos/mensuales/{id}` | Actualizar ingreso mensual | `id`, Body: `IngresoMensualUpdate` |
+| GET | `/ingresos/rentabilidad/{year}` | Análisis de rentabilidad anual | `year` |
+
+**Endpoint de Rentabilidad:**
+- Calcula rentabilidad mensual: `Ingresos - Gastos (facturas) - Costos de Personal`
+- Integra datos de:
+  - `ingresos_mensuales` (ingresos por mes)
+  - `facturas` (gastos por mes, sumando `importe_total`)
+  - `costos_personal` (costos de personal por mes)
+- Retorna array de 12 meses con: ingresos, gastos, costos_personal, beneficio neto, margen (%)
 
 **⚠️ IMPORTANTE:**
 - **Ingresos globales, no por sucursal**
+- **Análisis de rentabilidad incluye costos de personal desde Enero 2026**
 
 ---
 
-#### 6. `/api/auth/*` (AuthRouter)
+#### 6. `/api/costos-personal/*` (CostosPersonalRouter)
+
+**Endpoints principales:**
+
+| Método | Endpoint | Descripción | Parámetros |
+|--------|----------|-------------|------------|
+| GET | `/costos-personal/{year}` | Costos de personal por año | `year` (path param) |
+| POST | `/costos-personal` | Crear/actualizar costo mensual | Body: `CostoPersonalCreate` |
+| PUT | `/costos-personal/{costo_id}` | Actualizar costo existente | `costo_id`, Body: `CostoPersonalUpdate` |
+| DELETE | `/costos-personal/{costo_id}` | Eliminar costo de personal | `costo_id` |
+
+**Schemas Pydantic:**
+
+```python
+class CostoPersonalBase(BaseModel):
+    mes: int
+    año: int
+    sueldos_netos: float
+    coste_empresa: float
+    notas: Optional[str] = None
+
+class CostoPersonalCreate(CostoPersonalBase):
+    pass
+
+class CostoPersonalUpdate(BaseModel):
+    sueldos_netos: Optional[float] = None
+    coste_empresa: Optional[float] = None
+    notas: Optional[str] = None
+
+class CostoPersonalResponse(CostoPersonalBase):
+    id: int
+    total_personal: float
+    creado_en: datetime
+    actualizado_en: datetime
+```
+
+**Repository:**
+- `CostoPersonalRepository` en `src/db/repositories.py`
+- Métodos: `get_by_year()`, `get_by_month_year()`, `upsert()`, `delete()`
+- UPSERT con `ON CONFLICT DO UPDATE` para idempotencia (evita duplicados por mes/año)
+
+**⚠️ IMPORTANTE:**
+- **Costos globales, no por sucursal**
+- **El endpoint POST usa UPSERT: si ya existe el registro para el mes/año, lo actualiza**
+- **Integración con `/api/ingresos/rentabilidad/{year}` para análisis de rentabilidad**
+
+---
+
+#### 7. `/api/auth/*` (AuthRouter)
 
 **Endpoints principales:**
 
@@ -929,6 +1034,7 @@ GOOGLE_DRIVE_FOLDER_ID/
 - ✅ `ingest_events` - **ÚTIL** (auditoría por sucursal)
 - ✅ `sync_state` - **CRÍTICO** (estado de sync por sucursal)
 - ✅ `ingresos_mensuales` - **IMPORTANTE** (ingresos por sucursal)
+- ✅ `costos_personal` - **IMPORTANTE** (costos de personal por sucursal)
 
 **Tablas que pueden ser compartidas:**
 - `categorias` - **DECISIÓN:** ¿Categorías globales o por sucursal?
@@ -953,6 +1059,7 @@ GOOGLE_DRIVE_FOLDER_ID/
 - Endpoints de `/api/proveedores/*` necesitan decidir si filtran por sucursal
 - Endpoints de `/api/system/*` necesitan `sucursal_id` para estadísticas
 - Endpoints de `/api/ingresos/*` necesitan `sucursal_id`
+- Endpoints de `/api/costos-personal/*` necesitan `sucursal_id`
 
 **Middleware nuevo:**
 - `SucursalMiddleware`: Extraer `sucursal_id` de sesión o header
@@ -1206,6 +1313,7 @@ CREATE TABLE usuarios_sucursales (
 - [ ] Agregar columna `sucursal_id` a `proveedores` (si se separan)
 - [ ] Agregar columna `sucursal_id` a `ingest_events`
 - [ ] Agregar columna `sucursal_id` a `ingresos_mensuales`
+- [ ] Agregar columna `sucursal_id` a `costos_personal`
 - [ ] Modificar `sync_state` para keys por sucursal
 - [ ] Crear índices necesarios
 - [ ] Migrar datos existentes (asignar a Sucursal 1)
@@ -1219,6 +1327,8 @@ CREATE TABLE usuarios_sucursales (
 - [ ] Agregar `sucursal_id` a todos los endpoints de `/api/facturas/*`
 - [ ] Agregar `sucursal_id` a endpoints de `/api/system/*`
 - [ ] Agregar `sucursal_id` a endpoints de `/api/ingresos/*`
+- [ ] Agregar `sucursal_id` a endpoints de `/api/costos-personal/*`
+- [ ] Modificar `CostoPersonalRepository` para filtrar por `sucursal_id`
 - [ ] Crear dependency `get_sucursal_id()`
 - [ ] Crear middleware `SucursalMiddleware` (opcional)
 - [ ] Actualizar schemas Pydantic
@@ -1294,8 +1404,10 @@ WHERE sucursal_id = 1
 - `src/api/routes/facturas.py` - Endpoints de facturas
 - `src/api/routes/proveedores.py` - Endpoints de proveedores
 - `src/api/routes/system.py` - Endpoints de sistema
+- `src/api/routes/ingresos.py` - Endpoints de ingresos y rentabilidad
+- `src/api/routes/costos_personal.py` - Endpoints de costos de personal
 - `src/db/models.py` - Modelos SQLAlchemy
-- `src/db/repositories.py` - Repositorios de datos
+- `src/db/repositories.py` - Repositorios de datos (incluye CostoPersonalRepository)
 - `src/db/database.py` - Configuración de conexión
 - `src/drive_client.py` - Cliente de Google Drive
 - `src/main.py` - Script de procesamiento
@@ -1312,6 +1424,75 @@ WHERE sucursal_id = 1
 - `docker-compose.frontend.yml` - Orquestación Docker
 - `Dockerfile.backend` - Build del backend
 
+**Migraciones:**
+- `migrations/20260119_add_costos_personal.sql` - Creación tabla costos_personal
+
+---
+
+## 📊 Cambios Recientes Implementados (Enero 2026)
+
+### Nueva Funcionalidad: Costos de Personal
+
+**Fecha de implementación:** Enero 19, 2026
+
+**Descripción:**
+Se implementó un sistema completo para registrar y gestionar los costos de personal mensuales, que incluye:
+- Sueldos netos del personal
+- Costes de empresa (seguros sociales, etc.)
+- Cálculo automático del total de personal
+- Integración con análisis de rentabilidad
+
+**Componentes implementados:**
+
+1. **Base de Datos:**
+   - Nueva tabla `costos_personal` con campos:
+     - `mes`, `año` (clave compuesta única)
+     - `sueldos_netos` (DECIMAL 18,2)
+     - `coste_empresa` (DECIMAL 18,2)
+     - `total_personal` (campo calculado STORED)
+     - `notas` (opcional)
+   - Migración: `migrations/20260119_add_costos_personal.sql`
+   - Constraints: validación rango mes (1-12), año (2000-2100)
+   - Índices: `idx_costos_personal_año`, `idx_costos_personal_mes_año`
+
+2. **Backend (FastAPI):**
+   - Modelo SQLAlchemy: `CostoPersonal` en `src/db/models.py`
+   - Repositorio: `CostoPersonalRepository` en `src/db/repositories.py`
+     - Métodos: `get_by_year()`, `get_by_month_year()`, `upsert()`, `delete()`
+     - UPSERT con idempotencia (ON CONFLICT DO UPDATE)
+   - Router: `src/api/routes/costos_personal.py`
+     - GET `/{year}` - Obtener costos del año
+     - POST `/` - Crear/actualizar (UPSERT)
+     - PUT `/{costo_id}` - Actualizar existente
+     - DELETE `/{costo_id}` - Eliminar registro
+   - Schemas Pydantic: `CostoPersonalCreate`, `CostoPersonalUpdate`, `CostoPersonalResponse`
+
+3. **Integración con Rentabilidad:**
+   - Modificado endpoint `/api/ingresos/rentabilidad/{year}`
+   - Ahora incluye costos de personal en el cálculo de gastos totales
+   - Fórmula: `Beneficio Neto = Ingresos - Gastos (facturas) - Costos Personal`
+   - Retorna array mensual con breakdown completo
+
+4. **Documentación:**
+   - `REPORTE_IMPLEMENTACION_COSTOS_PERSONAL.md` - Reporte técnico completo
+   - `API_COSTOS_PERSONAL_FRONTEND.md` - Guía para desarrollo frontend
+
+**Estado actual:**
+- ✅ Backend completamente funcional y testeado
+- ✅ Migración de base de datos aplicada
+- ✅ APIs documentadas con OpenAPI
+- ✅ Integración con análisis de rentabilidad
+- ⏳ Frontend pendiente de desarrollo
+
+**Consideraciones para Multi-Sucursal:**
+- La tabla `costos_personal` **NO tiene campo `sucursal_id` actualmente**
+- Los costos de personal son **globales**
+- En implementación multi-sucursal se deberá:
+  - Agregar columna `sucursal_id` a la tabla
+  - Modificar constraint único a `(mes, año, sucursal_id)`
+  - Filtrar por sucursal en todos los endpoints
+  - Actualizar análisis de rentabilidad para filtrar por sucursal
+
 ---
 
 ## 🎯 Resumen para Plan de Implementación
@@ -1320,10 +1501,12 @@ WHERE sucursal_id = 1
 
 1. **Base de datos actual:** PostgreSQL `negocio_db`, sin soporte multi-sucursal
 2. **Tabla principal:** `facturas` - necesita `sucursal_id`
-3. **APIs actuales:** Filtran por `month` y `year`, NO por sucursal
-4. **Frontend:** React-admin, sin selector de sucursal
-5. **Google Drive:** Una carpeta base, necesita estructura por sucursal
-6. **Procesamiento:** Script `src/main.py` procesa todas las facturas sin distinción
+3. **Tablas de análisis:** `ingresos_mensuales`, `costos_personal` - necesitan `sucursal_id`
+4. **APIs actuales:** Filtran por `month` y `year`, NO por sucursal
+5. **Frontend:** React-admin, sin selector de sucursal
+6. **Google Drive:** Una carpeta base, necesita estructura por sucursal
+7. **Procesamiento:** Script `src/main.py` procesa todas las facturas sin distinción
+8. **Análisis de rentabilidad:** Integrado con costos de personal (Enero 2026)
 
 ### Decisiones Requeridas
 
@@ -1338,7 +1521,7 @@ WHERE sucursal_id = 1
 ```
 Base de Datos:
   - Tabla `sucursales` (id, nombre, codigo, activa)
-  - Campo `sucursal_id` en facturas, ingest_events, ingresos_mensuales
+  - Campo `sucursal_id` en facturas, ingest_events, ingresos_mensuales, costos_personal
   - Proveedores COMPARTIDOS (sin sucursal_id)
   - Categorías COMPARTIDAS (sin sucursal_id)
 

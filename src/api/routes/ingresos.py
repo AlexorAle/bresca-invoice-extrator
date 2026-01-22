@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from decimal import Decimal
 from datetime import date
 from src.db.database import Database
-from src.db.models import IngresoMensual, Factura
+from src.db.models import IngresoMensual, Factura, CostoPersonal
 from sqlalchemy import func, extract
 
 router = APIRouter(tags=["ingresos"])
@@ -18,6 +18,8 @@ class IngresoMensualItem(BaseModel):
     año: int
     ingresos: float
     gastos: float
+    gastos_personal: float  # NUEVO: Costos de personal del mes
+    gastos_totales: float  # NUEVO: gastos + gastos_personal
     rentabilidad: float
     margen: float
     ingreso_cargado: bool
@@ -91,13 +93,25 @@ async def get_rentabilidad(
         for ingreso in ingresos_query:
             ingresos_cargados[ingreso.mes] = float(ingreso.monto_ingresos)
         
+        # Obtener costos de personal por mes
+        costos_personal_por_mes = {}
+        costos_personal_query = session.query(CostoPersonal).filter(
+            CostoPersonal.año == year
+        ).all()
+        
+        for costo in costos_personal_query:
+            total_personal = float(costo.sueldos_netos or 0) + float(costo.coste_empresa or 0)
+            costos_personal_por_mes[costo.mes] = total_personal
+        
         # Procesar los 12 meses
         for mes in range(1, 13):
             ingresos = ingresos_cargados.get(mes, 5000.0)  # Default 5000
             gastos = gastos_por_mes.get(mes, 0.0)
+            gastos_personal = costos_personal_por_mes.get(mes, 0.0)  # Costos de personal del mes
+            gastos_totales = gastos + gastos_personal  # Gastos totales (facturas + personal)
             ingreso_cargado = mes in ingresos_cargados
             
-            rentabilidad = ingresos - gastos
+            rentabilidad = ingresos - gastos_totales  # Usar gastos_totales en vez de solo gastos
             margen = (rentabilidad / ingresos * 100) if ingresos > 0 else 0
             
             # Determinar estado
@@ -113,6 +127,8 @@ async def get_rentabilidad(
                 año=year,
                 ingresos=ingresos,
                 gastos=gastos,
+                gastos_personal=gastos_personal,
+                gastos_totales=gastos_totales,
                 rentabilidad=rentabilidad,
                 margen=round(margen, 1),
                 ingreso_cargado=ingreso_cargado,
@@ -122,7 +138,7 @@ async def get_rentabilidad(
             # Sumar solo meses con datos cargados para totales
             if ingreso_cargado:
                 totales_ingresos += ingresos
-                totales_gastos += gastos
+                totales_gastos += gastos_totales  # Usar gastos_totales en totales
                 meses_con_datos += 1
         
         # Calcular totales
