@@ -78,8 +78,8 @@ export const CategoriasList = (props) => {
         margin: 0,
       }}
     >
-      <Box sx={isEmbedded ? {} : { p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
-        <Box sx={isEmbedded ? {} : { mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
+      <Box sx={isEmbedded ? {} : { p: { xs: 1, sm: 2, md: 3, lg: 4 } }}>
+        <Box sx={isEmbedded ? {} : { mx: 'auto', px: { xs: 1.5, sm: 2, md: 2.5, lg: 3 } }}>
           {!isEmbedded && (
             <>
               {/* Título */}

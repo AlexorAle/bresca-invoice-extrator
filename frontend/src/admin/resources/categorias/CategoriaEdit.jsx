@@ -27,8 +27,8 @@ export const CategoriaEdit = (props) => {
           margin: 0,
         }}
       >
-        <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
-          <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3, lg: 4 } }}>
+          <Box sx={{ mx: 'auto', px: { xs: 1.5, sm: 2, md: 2.5, lg: 3 } }}>
             {/* Título con botón volver */}
             <Box sx={{ 
               mt: PAGE_LAYOUT.titleMarginTop, 

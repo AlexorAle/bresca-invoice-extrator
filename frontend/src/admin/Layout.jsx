@@ -35,6 +35,8 @@ export const Layout = (props) => {
         setActiveSection('datos');
       } else if (cleanPath === 'categorias' || path.includes('/categorias')) {
         setActiveSection('datos'); // Categorías está dentro de Datos
+      } else if (cleanPath === 'costos-personal' || path.includes('/costos-personal')) {
+        setActiveSection('costos-personal');
       } else if (cleanPath === 'dashboard' || cleanPath === '' || path.endsWith('/invoice-dashboard/') || path === '/') {
         setActiveSection('dashboard');
       } else {
@@ -68,17 +70,21 @@ export const Layout = (props) => {
         />
       </div>
 
-      {/* Main Content con margen para el sidebar */}
+      {/* Main Content con margen para el sidebar + espacio mínimo */}
       <div 
         className="flex-1 transition-all duration-300" 
         style={{ 
-          marginLeft: isSidebarCollapsed ? '64px' : '256px',
+          marginLeft: isSidebarCollapsed ? '80px' : '272px', // 64px sidebar + 16px espacio | 256px sidebar + 16px espacio
           minHeight: '100vh',
+          padding: 0,
+          marginTop: 0,
         }}
       >
         {/* Renderizar contenido de React-admin directamente */}
         {/* RALayout puede causar problemas, renderizar children directamente */}
-        {props.children}
+        <div style={{ padding: 0, margin: 0 }}>
+          {props.children}
+        </div>
       </div>
     </div>
   );

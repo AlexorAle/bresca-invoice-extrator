@@ -152,11 +152,11 @@ export const ReporteDashboard = () => {
     >
       <Box 
         sx={{ 
-          p: { xs: 2, sm: 4, md: 6, lg: 8 },
+          p: { xs: 1, sm: 2, md: 3, lg: 4 },
           backgroundColor: COLORS.background.default,
         }}
       >
-        <Box sx={{ px: { xs: 2, md: 4 } }}>
+        <Box sx={{ px: { xs: 1, md: 2 } }}>
           {/* Título principal con márgenes reducidos */}
           <Typography
             variant="h3"

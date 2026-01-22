@@ -160,11 +160,18 @@ export const FacturaList = (props) => {
       }}
       empty={false}
       sx={{
+        padding: '0 !important',
+        margin: '0 !important',
         '& .RaList-main': {
           backgroundColor: '#f8fafc',
+          paddingTop: '0 !important',
+          paddingLeft: '0 !important',
+          paddingRight: '0 !important',
+          paddingBottom: '0 !important',
         },
         '& .RaList-content': {
           boxShadow: 'none',
+          padding: '0 !important',
         },
       }}
     >
@@ -176,9 +183,9 @@ export const FacturaList = (props) => {
           margin: 0,
         }}
       >
-        <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-          <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
-            {/* Título - PRIORIDAD 1: margin-top: 48px */}
+        <div className="p-1 sm:p-2 md:p-3 lg:p-4">
+          <div className="mx-auto px-1.5 sm:px-2 md:px-2.5 lg:px-3">
+            {/* Título - Sin margen superior */}
             <Box sx={{ mt: PAGE_LAYOUT.titleMarginTop, mb: PAGE_LAYOUT.titleMarginBottom }}>
               <Typography
                 variant="h3"

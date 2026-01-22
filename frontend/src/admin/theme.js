@@ -139,17 +139,23 @@ export const theme = createTheme({
     MuiList: {
       styleOverrides: {
         root: {
+          padding: '0 !important',
           '& .RaList-content': {
             borderTop: 'none !important',
             boxShadow: 'none !important',
             border: 'none !important',
+            padding: '0 !important',
           },
           '& .RaList-main': {
             paddingTop: '0 !important',
+            paddingLeft: '0 !important',
+            paddingRight: '0 !important',
+            paddingBottom: '0 !important',
             borderTop: 'none !important',
           },
           '& .RaList-actions': {
             borderTop: 'none !important',
+            padding: '0 !important',
           },
         },
       },

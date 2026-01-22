@@ -59,10 +59,10 @@ export default function Dashboard() {
         onCollapseChange={setIsSidebarCollapsed}
       />
 
-      {/* Main Content */}
-      <div className={`flex-1 transition-all duration-300 ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
-        <div className="p-2 sm:p-4 md:p-6 lg:p-8">
-          <div className="mx-auto px-3 sm:px-4 md:px-5 lg:px-6">
+      {/* Main Content con margen para el sidebar + espacio mínimo */}
+      <div className={`flex-1 transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-[272px]'}`}>
+        <div className="p-1 sm:p-2 md:p-3 lg:p-4">
+          <div className="mx-auto px-1.5 sm:px-2 md:px-2.5 lg:px-3">
             {activeSection === 'dashboard' && (
               <>
                 <Header 

@@ -462,16 +462,23 @@ export const ProveedorList = (props) => (
     sort={{ field: 'nombre', order: 'ASC' }}
     empty={false}
     sx={{
+      padding: '0 !important',
+      margin: '0 !important',
       '& .RaList-main': {
         backgroundColor: '#f8fafc',
-        paddingTop: 0,
+        paddingTop: '0 !important',
+        paddingLeft: '0 !important',
+        paddingRight: '0 !important',
+        paddingBottom: '0 !important',
       },
       '& .RaList-content': {
         boxShadow: 'none',
         borderTop: 'none',
+        padding: '0 !important',
       },
       '& .RaList-actions': {
         display: 'none',
+        padding: '0 !important',
       },
     }}
   >
@@ -483,9 +490,9 @@ export const ProveedorList = (props) => (
         margin: 0,
       }}
     >
-      <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
-        <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 } }}>
-          {/* Título - PRIORIDAD 1: margin-top: 48px */}
+      <Box sx={{ p: { xs: 1, sm: 2, md: 3, lg: 4 } }}>
+        <Box sx={{ mx: 'auto', px: { xs: 1.5, sm: 2, md: 2.5, lg: 3 } }}>
+          {/* Título - Sin margen superior */}
           <Box sx={{ mt: PAGE_LAYOUT.titleMarginTop, mb: PAGE_LAYOUT.titleMarginBottom }}>
             <Typography
               variant="h3"
@@ -639,8 +646,8 @@ export const ProveedorEdit = () => (
         margin: 0,
       }}
     >
-      <Box sx={{ p: { xs: 2, sm: 4, md: 6, lg: 8 } }}>
-        <Box sx={{ mx: 'auto', px: { xs: 3, sm: 4, md: 5, lg: 6 }, maxWidth: '800px' }}>
+      <Box sx={{ p: { xs: 1, sm: 2, md: 3, lg: 4 } }}>
+        <Box sx={{ mx: 'auto', px: { xs: 1.5, sm: 2, md: 2.5, lg: 3 }, maxWidth: '800px' }}>
           {/* Header */}
           <Box sx={{ mb: 4 }}>
             <Typography

@@ -49,7 +49,7 @@ export const CARD_STYLES = {
 };
 
 export const PAGE_LAYOUT = {
-  titleMarginTop: '24px', // Reducido a la mitad (de 48px a 24px)
+  titleMarginTop: '0px', // Eliminado - sin margen superior
   titleMarginBottom: '24px',
   sectionSpacing: '32px',
   gridGap: '16px',
